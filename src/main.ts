@@ -862,6 +862,7 @@ function frame(now: number) {
   else spinDays += SPIN_EXACT_MAX * dt;
 
   if (stepScale(dt)) for (const r of REGIONS) placeRegion(regionAnchors.get(r.id)!, r);
+  system.focus = focused;
   system.update(simDays, spinDays, dt);
   belt.update(simDays);
   kuiper.update(simDays);
@@ -897,3 +898,6 @@ manager.onLoad = () => {
   goSystem();
 };
 requestAnimationFrame(frame);
+
+// Dev-only handle for debugging from the browser console / automated checks.
+if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__cosmic = { system, camera, controls, scale };

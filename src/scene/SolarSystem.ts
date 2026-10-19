@@ -6,7 +6,7 @@ import { EARTH_KM, blend, helioDistance, scale } from './scale';
 import { BODIES, type BodyDef, type Site } from '../data/bodies';
 import {
   DEG, basisFromPole, elementsAt, equToScene, keplerPosition, latLonToLocal, moonPosition, orbitNormal,
-  orbitalPosition, periodDays,
+  orbitalPosition,
 } from '../astro';
 import {
   atmosphereFragment, atmosphereVertex, coronaFragment, coronaVertex, earthFragment,
@@ -227,6 +227,30 @@ export class Body {
       if (u.uRingNormal) u.uRingNormal.value.copy(pole);
     }
   }
+}
+
+/**
+ * Moon orbits fade where they pass close to the camera. When the camera sits inside a
+ * moon's orbit (next to the planet, especially at true scale), the near part of the ring
+ * would otherwise sweep across the screen as a huge distorted arc.
+ */
+function fadeNearCamera(material: THREE.LineBasicMaterial, moon: Body) {
+  const uFade = { value: 1 };
+  material.onBeforeRender = () => {
+    // Fade distance follows the current orbit size (it changes with the scale mode).
+    uFade.value = Math.max(moon.root.position.length(), 1e-3) * 0.45;
+  };
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.uFade = uFade;
+    shader.vertexShader = 'varying float vCamDist;\n' + shader.vertexShader.replace(
+      '#include <project_vertex>',
+      '#include <project_vertex>\nvCamDist = length(mvPosition.xyz);',
+    );
+    shader.fragmentShader = 'uniform float uFade;\nvarying float vCamDist;\n' + shader.fragmentShader.replace(
+      '#include <opaque_fragment>',
+      'diffuseColor.a *= smoothstep(uFade * 0.35, uFade, vCamDist);\n#include <opaque_fragment>',
+    );
+  };
 }
 
 export class SolarSystem {
@@ -472,11 +496,10 @@ export class SolarSystem {
     for (const b of this.bodies) {
       if (b.def.id === 'sun') continue;
       if (!b.def.orbit && b.def.id !== 'moon') continue;
-      const N = b.def.group === 'moon' ? 256 : 720;
-      const line = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(Array.from({ length: N + 1 }, () => new THREE.Vector3())),
-        new THREE.LineBasicMaterial({ color: b.def.color, transparent: true, opacity: 0.22, depthWrite: false }),
-      );
+      const N = b.def.group === 'moon' ? 720 : 1440;
+      const material = new THREE.LineBasicMaterial({ color: b.def.color, transparent: true, opacity: 0.22, depthWrite: false });
+      if (b.def.group === 'moon') fadeNearCamera(material, b);
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(Array.from({ length: N + 1 }, () => new THREE.Vector3())), material);
       line.frustumCulled = false;
       b.orbitLine = line;
       (b.def.group === 'moon' ? b.parent!.root : this.group).add(line);
@@ -484,20 +507,54 @@ export class SolarSystem {
     }
   }
 
-  /** Re-sample an orbit polyline around day d (elements and lunar nodes drift slowly). */
+  /**
+   * Re-sample an orbit polyline for day d.
+   *
+   * The line is the osculating ellipse at d (elements frozen, mean anomaly swept), so it is
+   * exactly closed and the body lies on it. Samples cluster around the body: the mapping
+   * x → x − 0.9·sin(2πx)/(2π) makes points ten times denser there, so the chord sag next to
+   * the body (noticeable for small, far bodies at true scale) shrinks a hundredfold.
+   * The Moon follows Meeus' theory, not fixed elements: it is sampled over time instead and
+   * the small residual gap is spread along the loop.
+   */
   private sampleOrbit(b: Body, d: number) {
     const line = b.orbitLine!;
     const pos = line.geometry.attributes.position as THREE.BufferAttribute;
     const N = pos.count - 1;
-    const period = b.def.id === 'moon' ? 27.321661 : periodDays(b.def.orbit!);
     const v = new THREE.Vector3();
-    for (let k = 0; k <= N; k++) {
-      b.orbitPoint(d + (period * k) / N, v);
-      pos.setXYZ(k, v.x, v.y, v.z);
+    const warp = (x: number) => x - (0.9 * Math.sin(2 * Math.PI * x)) / (2 * Math.PI);
+    if (b.def.id === 'moon') {
+      for (let k = 0; k <= N; k++) {
+        b.orbitPoint(d + 27.321661 * warp(k / N), v);
+        pos.setXYZ(k, v.x, v.y, v.z);
+      }
+      const gap = new THREE.Vector3(pos.getX(N) - pos.getX(0), pos.getY(N) - pos.getY(0), pos.getZ(N) - pos.getZ(0));
+      for (let k = 1; k <= N; k++) {
+        const f = warp(k / N);
+        pos.setXYZ(k, pos.getX(k) - gap.x * f, pos.getY(k) - gap.y * f, pos.getZ(k) - gap.z * f);
+      }
+    } else {
+      const k0 = { ...elementsAt(b.def.orbit!, d) };
+      const kk = { ...k0 };
+      const isMoon = b.def.group === 'moon' && b.parent;
+      // Vertices are stored relative to the body's current position (the line object sits
+      // there): at true scale coordinates reach ~10⁶ and float32 would lose ~0.1 unit —
+      // more than the radius of a dwarf planet.
+      const origin = line.position;
+      for (let k = 0; k <= N; k++) {
+        kk.L = k0.L + 360 * warp(k / N);
+        const r = keplerPosition(kk, v);
+        const dist = isMoon ? b.parent!.moonRadius(r, b.orbitSpread) : helioDistance(r);
+        v.multiplyScalar(dist / r);
+        if (k === 0) origin.copy(v);
+        pos.setXYZ(k, v.x - origin.x, v.y - origin.y, v.z - origin.z);
+      }
     }
-    if (b.def.id === 'moon') pos.copyAt(N, pos, 0); // perturbations leave the loop slightly open
     pos.needsUpdate = true;
   }
+
+  /** Body whose orbit (and moons' orbits) is refreshed every frame. */
+  focus: Body | null = null;
 
   private lastScale = 0;
 
@@ -509,11 +566,15 @@ export class SolarSystem {
       this.lastScale = scale.t;
       for (const b of this.bodies) if (b.orbitLine) this.sampleOrbit(b, d);
     }
-    // Moon orbits precess quickly (nodes, apsides): refresh them a couple of times per second.
+    // Lines are re-anchored at the bodies twice a second (every frame for the focused system),
+    // so the densest part of each line always sits where the body is.
     this.orbitClock -= dt;
     if (this.orbitClock <= 0) {
       this.orbitClock = 0.5;
-      for (const b of this.bodies) if (b.def.group === 'moon' && b.orbitLine) this.sampleOrbit(b, d);
+      for (const b of this.bodies) if (b.orbitLine) this.sampleOrbit(b, d);
+    } else if (this.focus) {
+      const f = this.focus;
+      for (const b of this.bodies) if (b.orbitLine && (b === f || b.parent === f || b === f.parent)) this.sampleOrbit(b, d);
     }
   }
 
