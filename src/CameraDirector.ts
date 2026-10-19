@@ -99,7 +99,7 @@ export class CameraDirector {
       endTargetLocal: toLocal(opts.target, opts.anchor),
       t: 0,
       duration: opts.duration ?? THREE.MathUtils.clamp(1.9 + Math.log10(dist + 1) * 0.5, 2.1, 3.6),
-      lift: swing ? Math.min(dist * 0.55, 160) : Math.min(dist * 0.18, 120),
+      lift: dist * (swing ? 0.5 : 0.18),
       swing,
       fovKick: 10 * THREE.MathUtils.smoothstep(dist, 30, 400),
       opts,

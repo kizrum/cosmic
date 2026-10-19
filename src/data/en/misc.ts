@@ -101,7 +101,7 @@ export const EN_CREDITS: CreditGroup[] = [
 ];
 
 export const EN_NOTICES = [
-  'Body sizes and the distances between them are compressed: at true scale the planets would be invisible. Directions, positions for the chosen date, axial tilts and rotation follow scientific data.',
+  'In the default mode body sizes and distances are compressed so that everything is visible at once; the order of orbits and the nesting of moon systems are preserved. The “True scale” button (key M) shows real sizes and distances. Directions, positions for the chosen date, axial tilts and rotation follow scientific data in both modes.',
   'Unimaged areas of Uranus’s moons, Triton, Pluto and Charon are filled in schematically. The colouring of Eris, Makemake and Haumea is schematic: they have never been imaged up close.',
   'NASA material is used without any endorsement by NASA.',
 ];

@@ -71,6 +71,7 @@ export interface UIHandlers {
   resetNow(): void;
   toggleLight(): void;
   toggleOrbits(): void;
+  toggleScale(): void;
 }
 
 export class UI {
@@ -100,6 +101,7 @@ export class UI {
     this.buildCredits();
     $('#btn-light').addEventListener('click', () => h.toggleLight());
     $('#btn-orbits').addEventListener('click', () => h.toggleOrbits());
+    $('#btn-scale').addEventListener('click', () => h.toggleScale());
     document.querySelectorAll<HTMLElement>('[data-lang]').forEach((b) =>
       b.addEventListener('click', () => setLang(b.dataset.lang as Lang)),
     );
@@ -279,7 +281,7 @@ export class UI {
     $('#date-btn').classList.toggle('is-live', live);
   }
 
-  setToggle(id: 'light' | 'orbits', on: boolean) {
+  setToggle(id: 'light' | 'orbits' | 'scale', on: boolean) {
     $(`#btn-${id}`).classList.toggle('on', on);
   }
 

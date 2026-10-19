@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { DEG, equToScene, sceneDistance } from '../astro';
+import { DEG, equToScene } from '../astro';
+import { helioDistance, scale } from './scale';
 
 /**
  * Milky Way panorama in galactic coordinates, oriented with the real galactic
@@ -39,6 +40,7 @@ export class KuiperBelt {
   private readonly el: { a: number; e: number; i: number; node: number; peri: number; M0: number }[] = [];
   private readonly pos: Float32Array;
   private lastD = NaN;
+  private lastScale = 0;
 
   constructor(count = 3500) {
     for (let k = 0; k < count; k++) {
@@ -60,9 +62,10 @@ export class KuiperBelt {
   }
 
   update(d: number) {
-    // Periods are ~250–330 years: recompute only when the date moved noticeably.
-    if (Math.abs(d - this.lastD) < 20) return;
+    // Periods are ~250–330 years: recompute only when the date (or the scale) changed.
+    if (Math.abs(d - this.lastD) < 20 && scale.t === this.lastScale) return;
     this.lastD = d;
+    this.lastScale = scale.t;
     this.el.forEach((o, k) => {
       const M = o.M0 + (d / (365.256 * Math.pow(o.a, 1.5))) * Math.PI * 2;
       let E = M;
@@ -74,7 +77,7 @@ export class KuiperBelt {
       const x = cn * Math.cos(u) - sn * Math.sin(u) * ci;
       const y = sn * Math.cos(u) + cn * Math.sin(u) * ci;
       const z = Math.sin(u) * si;
-      const s = sceneDistance(r);
+      const s = helioDistance(r);
       this.pos[k * 3] = x * s;
       this.pos[k * 3 + 1] = z * s;
       this.pos[k * 3 + 2] = -y * s;
@@ -143,7 +146,7 @@ export class AsteroidBelt {
     for (let i = 0; i < this.a.length; i++) {
       const a = this.a[i];
       const M = this.phase[i] + (d / (365.256 * Math.pow(a, 1.5))) * Math.PI * 2;
-      const r = sceneDistance(a);
+      const r = helioDistance(a);
       const cn = Math.cos(this.node[i]), sn = Math.sin(this.node[i]);
       const cu = Math.cos(M), su = Math.sin(M);
       const ci = Math.cos(this.incl[i]), si = Math.sin(this.incl[i]);

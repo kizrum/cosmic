@@ -1,27 +1,21 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import type { SiteOutline } from './SiteOutlines';
+import { SUN_RADIUS, layoutMoons, moonDistance, visualRadius } from './layout';
+import { EARTH_KM, blend, helioDistance, scale } from './scale';
 import { BODIES, type BodyDef, type Site } from '../data/bodies';
 import {
   DEG, basisFromPole, elementsAt, equToScene, keplerPosition, latLonToLocal, moonPosition, orbitNormal,
-  periodDays, satelliteDistance, scenePosition,
+  orbitalPosition, periodDays,
 } from '../astro';
 import {
   atmosphereFragment, atmosphereVertex, coronaFragment, coronaVertex, earthFragment,
   ringFragment, ringShadowChunk, ringVertex, sunFragment, worldVertex,
 } from './shaders';
 
-const SUN_RADIUS = 12;
-/**
- * Earth–Moon distance in scene units (Earth radius = 1), compressed with the same rule as
- * every other moon: 60.3 Earth radii → ≈ 10.2.
- */
-const MOON_DISTANCE = satelliteDistance(384_400 / 6371);
-const SUN_POS = new THREE.Vector3(0, 0, 0);
+export { visualRadius };
 
-/** Radii are compressed (power 0.55) so that small worlds stay visible next to giants. */
-export const visualRadius = (def: BodyDef) =>
-  def.id === 'sun' ? SUN_RADIUS : Math.max(0.045, Math.pow(def.radiusKm / 6371, 0.55));
+const SUN_POS = new THREE.Vector3(0, 0, 0);
 
 interface AtmosphereStyle {
   scale: number; color: [number, number, number]; sunset: [number, number, number];
@@ -63,9 +57,21 @@ const HAZE: Record<string, { color?: number; texture?: string; scale: number; sp
 };
 
 export class Body {
-  readonly radius: number;
-  /** Radius of the (unscaled) sphere geometry. */
-  readonly geoRadius: number;
+  /** Illustrative-mode radii: `baseGeo` is the sphere geometry radius (body-fixed units). */
+  readonly baseGeo: number;
+  readonly baseRadius: number;
+  /** Uniform size factor applied to the equatorial frame (1 in illustrative mode). */
+  sizeScale = 1;
+  /** Visual extent (scene units), including oblateness / triaxial shape. */
+  get radius() {
+    return this.baseRadius * this.sizeScale;
+  }
+  /** Sphere radius in scene units. */
+  get geoRadius() {
+    return this.baseGeo * this.sizeScale;
+  }
+  /** Uniforms holding sizes in world units: rescaled with the body. */
+  readonly scaledUniforms: { u: THREE.IUniform; base: number }[] = [];
   parent?: Body;
   readonly root = new THREE.Group();
   readonly tilt = new THREE.Group();
@@ -90,7 +96,7 @@ export class Body {
   private readonly q = new THREE.Quaternion();
 
   constructor(readonly def: BodyDef) {
-    this.geoRadius = visualRadius(def);
+    this.baseGeo = visualRadius(def);
     let maxScale = 1;
     if (def.shape) {
       const [a, b, c] = def.shape;
@@ -100,12 +106,12 @@ export class Body {
     } else if (def.flattening) {
       this.spin.scale.y = 1 - def.flattening;
     }
-    this.radius = this.geoRadius * maxScale;
+    this.baseRadius = this.baseGeo * maxScale;
     this.root.name = def.id;
     this.root.add(this.tilt);
     this.tilt.add(this.spin);
     // Rotation axis through the poles (local +Y of the equatorial frame); shown for the focused body.
-    const ext = this.radius * (def.id === 'saturn' ? 2.6 : 1.6);
+    const ext = this.baseRadius * (def.id === 'saturn' ? 2.6 : 1.6);
     this.axis = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -ext, 0), new THREE.Vector3(0, ext, 0)]),
       new THREE.LineBasicMaterial({ color: def.color, transparent: true, opacity: 0.55, depthWrite: false }),
@@ -120,28 +126,42 @@ export class Body {
 
   /** Radius (body-fixed units) at which surface overlays are drawn: just above clouds/haze. */
   overlayRadius() {
-    const cloudR = this.clouds ? (this.clouds.geometry as THREE.SphereGeometry).parameters.radius : this.geoRadius;
-    return Math.max(cloudR, this.geoRadius) * 1.004;
+    const cloudR = this.clouds ? (this.clouds.geometry as THREE.SphereGeometry).parameters.radius : this.baseGeo;
+    return Math.max(cloudR, this.baseGeo) * 1.004;
   }
 
   addSite(site: Site) {
     const anchor = new THREE.Object3D();
-    anchor.position.copy(latLonToLocal(site.lat, site.lon)).multiplyScalar(this.geoRadius * (site.elevation ?? 1));
+    anchor.position.copy(latLonToLocal(site.lat, site.lon)).multiplyScalar(this.baseGeo * (site.elevation ?? 1));
     this.spin.add(anchor);
     this.siteAnchors.set(site.id, anchor);
+  }
+
+  /** Squeeze factor for the outer moon system (1 = only the generic compression). */
+  moonSqueeze = 1;
+  moonKeep = 2.5;
+  /** Per-moon spacing factor so that neighbouring moons never touch. */
+  orbitSpread = 1;
+
+  /** Scene distance of a moon at `km` from this body's centre (spread: per-moon factor). */
+  moonRadius(km: number, spread = 1) {
+    return blend(moonDistance(this.def, km, this.moonSqueeze, this.moonKeep) * spread, km / EARTH_KM);
   }
 
   /** Scene position relative to the parent body (or the Sun). */
   orbitPoint(d: number, out: THREE.Vector3) {
     const def = this.def;
-    if (def.id === 'moon') {
-      const km = moonPosition(d, out);
-      return out.multiplyScalar(MOON_DISTANCE * (km / 384_400));
+    if (def.id === 'moon' && this.parent) {
+      const km = moonPosition(d, out); // unit direction
+      return out.multiplyScalar(this.parent.moonRadius(km, this.orbitSpread));
     }
     if (!def.orbit) return out.set(0, 0, 0);
-    if (!this.parent || this.parent.def.id === 'sun' || def.group !== 'moon') return scenePosition(def.orbit, d, out);
+    if (!this.parent || this.parent.def.id === 'sun' || def.group !== 'moon') {
+      const au = orbitalPosition(def.orbit, d, out);
+      return out.multiplyScalar(helioDistance(au) / au);
+    }
     const km = keplerPosition(elementsAt(def.orbit, d), out);
-    return out.multiplyScalar((this.parent.geoRadius * satelliteDistance(km / this.parent.def.radiusKm)) / km);
+    return out.multiplyScalar(this.parent.moonRadius(km, this.orbitSpread) / km);
   }
 
   private poleAt(d: number, out: THREE.Vector3) {
@@ -163,6 +183,8 @@ export class Body {
 
   update(d: number, spinDays: number, dt: number) {
     const def = this.def;
+    this.sizeScale = blend(this.baseGeo, def.radiusKm / EARTH_KM) / this.baseGeo;
+    this.tilt.scale.setScalar(this.sizeScale);
     this.orbitPoint(d, this.root.position);
     this.tilt.quaternion.setFromRotationMatrix(basisFromPole(this.poleAt(d, this.tmp), this.basis));
 
@@ -192,9 +214,11 @@ export class Body {
     }
   }
 
-  syncUniforms(time: number) {
-    this.getWorldPosition(this.worldPos);
-    const pole = this.tmp.set(0, 1, 0).applyQuaternion(this.tilt.getWorldQuaternion(this.q));
+  /** Refresh shader uniforms; positions and directions are given in VIEW space (see shaders.ts). */
+  syncUniforms(time: number, view: THREE.Matrix4) {
+    this.getWorldPosition(this.worldPos).applyMatrix4(view);
+    const pole = this.tmp.set(0, 1, 0).applyQuaternion(this.tilt.getWorldQuaternion(this.q)).transformDirection(view);
+    for (const su of this.scaledUniforms) su.u.value = su.base * this.sizeScale;
     for (const u of this.uniforms) {
       if (u.uCenter) u.uCenter.value.copy(this.worldPos);
       if (u.uRingCenter) u.uRingCenter.value.copy(this.worldPos);
@@ -223,7 +247,18 @@ export class SolarSystem {
       if (b.def.group === 'moon') b.parent!.root.add(b.root);
       else this.group.add(b.root);
     }
+    this.fitMoonSystems(d);
     this.buildOrbits(d);
+  }
+
+  /** Moon systems fitted to their neighbourhood (see layout.ts). */
+  private fitMoonSystems(d: number) {
+    const lay = layoutMoons(BODIES, d);
+    for (const b of this.bodies) {
+      b.moonSqueeze = lay.squeeze.get(b.def.id) ?? 1;
+      b.moonKeep = lay.keep.get(b.def.id) ?? 2.5;
+      b.orbitSpread = lay.spread.get(b.def.id) ?? 1;
+    }
   }
 
   get(id: string) {
@@ -239,7 +274,7 @@ export class SolarSystem {
 
   private build(def: BodyDef) {
     const body = new Body(def);
-    const r = body.geoRadius;
+    const r = body.baseGeo;
     const segs = def.group === 'moon' || def.group === 'dwarf' ? 96 : def.id === 'sun' ? 96 : 160;
     const geo = new THREE.SphereGeometry(r, segs, segs / 2);
     let material: THREE.Material;
@@ -315,7 +350,7 @@ export class SolarSystem {
   }
 
   private buildAtmosphere(body: Body, s: AtmosphereStyle) {
-    const r = body.geoRadius;
+    const r = body.baseGeo;
     const u = {
       uCenter: { value: new THREE.Vector3() },
       uSunPos: { value: SUN_POS },
@@ -328,6 +363,7 @@ export class SolarSystem {
       uMie: { value: s.mie },
     };
     body.uniforms.push(u);
+    body.scaledUniforms.push({ u: u.uRp, base: u.uRp.value }, { u: u.uRa, base: u.uRa.value });
     body.atmosphere = { uniforms: u, base: s.intensity };
     const mesh = new THREE.Mesh(
       new THREE.SphereGeometry(r * s.scale, 96, 48),
@@ -341,28 +377,29 @@ export class SolarSystem {
     mesh.renderOrder = 2;
     body.tilt.add(mesh);
     // When the camera dips inside the shell, render back faces so the sky stays visible.
-    mesh.onBeforeRender = (_r, _s, camera) => {
-      const inside = camera.position.distanceTo(u.uCenter.value) < u.uRa.value;
+    mesh.onBeforeRender = () => {
+      const inside = u.uCenter.value.length() < u.uRa.value; // uCenter is in view space
       (mesh.material as THREE.ShaderMaterial).side = inside ? THREE.BackSide : THREE.FrontSide;
     };
   }
 
   private buildSaturnRings(body: Body, planetMat: THREE.MeshStandardMaterial) {
     // Ring radii in Saturn equatorial radii: C ring inner edge → A ring outer edge.
-    const inner = body.radius * 1.239;
-    const outer = body.radius * 2.27;
+    const inner = body.baseRadius * 1.239;
+    const outer = body.baseRadius * 2.27;
     const map = this.tex('saturn_ring.png');
     const u = {
       uMap: { value: map },
       uSunPos: { value: SUN_POS },
       uCenter: { value: new THREE.Vector3() },
       uNormal: { value: new THREE.Vector3(0, 1, 0) },
-      uPlanetR: { value: body.radius },
+      uPlanetR: { value: body.baseRadius },
       uAmbient: { value: 0.03 },
       uInner: { value: inner },
       uOuter: { value: outer },
     };
     body.uniforms.push(u);
+    body.scaledUniforms.push({ u: u.uPlanetR, base: u.uPlanetR.value });
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(inner, outer, 256, 4),
       new THREE.ShaderMaterial({
@@ -384,11 +421,12 @@ export class SolarSystem {
       uRingMap: { value: map },
     };
     body.uniforms.push(su);
+    body.scaledUniforms.push({ u: su.uRingInner, base: inner }, { u: su.uRingOuter, base: outer });
     planetMat.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, su);
       shader.vertexShader = 'varying vec3 vRingWorld;\n' + shader.vertexShader.replace(
         '#include <project_vertex>',
-        '#include <project_vertex>\nvRingWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;',
+        '#include <project_vertex>\nvRingWorld = (modelViewMatrix * vec4(transformed, 1.0)).xyz;',
       );
       shader.fragmentShader =
         'uniform vec3 uSunPos;\nuniform vec3 uRingCenter;\nuniform vec3 uRingNormal;\nuniform float uRingInner;\nuniform float uRingOuter;\nuniform sampler2D uRingMap;\nvarying vec3 vRingWorld;\n' +
@@ -398,12 +436,12 @@ export class SolarSystem {
 
   /** Narrow, dark rings (Uranus, Neptune, Haumea) drawn as thin annuli in the equatorial plane. */
   private buildThinRings(body: Body, spec: { rings: [number, number, number][]; color: number }) {
-    const kmToScene = body.geoRadius / body.def.radiusKm;
+    const kmToScene = body.baseGeo / body.def.radiusKm;
     const group = new THREE.Group();
     for (const [rKm, wKm, opacity] of spec.rings) {
       const r = rKm * kmToScene;
       // Narrow rings would vanish at screen scale: give them a minimum visual width.
-      const w = Math.max(wKm * kmToScene, body.geoRadius * 0.006);
+      const w = Math.max(wKm * kmToScene, body.baseGeo * 0.006);
       const mesh = new THREE.Mesh(
         new THREE.RingGeometry(r - w / 2, r + w / 2, 256, 1),
         new THREE.MeshBasicMaterial({ color: spec.color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false }),
@@ -461,8 +499,16 @@ export class SolarSystem {
     pos.needsUpdate = true;
   }
 
+  private lastScale = 0;
+
   update(d: number, spinDays: number, dt: number) {
     for (const b of this.bodies) b.update(d, spinDays, dt);
+    this.corona.scale.setScalar(this.get('sun').sizeScale);
+    // While the scale animates every orbit line is re-sampled.
+    if (scale.t !== this.lastScale) {
+      this.lastScale = scale.t;
+      for (const b of this.bodies) if (b.orbitLine) this.sampleOrbit(b, d);
+    }
     // Moon orbits precess quickly (nodes, apsides): refresh them a couple of times per second.
     this.orbitClock -= dt;
     if (this.orbitClock <= 0) {
@@ -482,7 +528,10 @@ export class SolarSystem {
   }
 
   syncUniforms(time: number, camera: THREE.Camera) {
-    for (const b of this.bodies) b.syncUniforms(time);
+    camera.updateMatrixWorld();
+    const view = camera.matrixWorldInverse;
+    SUN_POS.set(0, 0, 0).applyMatrix4(view);
+    for (const b of this.bodies) b.syncUniforms(time, view);
     this.corona.quaternion.copy(camera.quaternion);
   }
 }

@@ -1,5 +1,11 @@
 // GLSL sources. All custom materials include the logarithmic depth chunks because the
-// renderer uses a log depth buffer (scene spans metres-scale close-ups to thousands of units).
+// renderer uses a log depth buffer (scene spans metres-scale close-ups to millions of units).
+//
+// Lighting maths runs in VIEW space (camera at the origin): in true-scale mode world
+// coordinates reach ~10⁶ units and float32 world positions would make atmospheres and ring
+// shadows shimmer. modelViewMatrix is computed on the CPU in double precision, so view-space
+// values stay small and exact. Uniforms named uSunPos / uCenter / uNormal / uRing* therefore
+// hold view-space values, refreshed every frame by SolarSystem.syncUniforms.
 
 const noise3D = /* glsl */ `
 vec3 mod289(vec3 x){return x-floor(x*(1./289.))*289.;}
@@ -36,21 +42,21 @@ vec2 raySphere(vec3 ro, vec3 rd, vec3 c, float r){
 }
 `;
 
-/** Generic vertex shader: world position/normal + uv. */
+/** Generic vertex shader: view-space position/normal + uv. */
 export const worldVertex = /* glsl */ `
 #include <common>
 #include <logdepthbuf_pars_vertex>
 varying vec2 vUv;
-varying vec3 vWorld;
-varying vec3 vNormalW;
+varying vec3 vView;
+varying vec3 vNormalV;
 varying vec3 vObj;
 void main(){
   vUv = uv;
   vObj = position;
-  vec4 wp = modelMatrix * vec4(position, 1.0);
-  vWorld = wp.xyz;
-  vNormalW = normalize(mat3(modelMatrix) * normal);
-  gl_Position = projectionMatrix * viewMatrix * wp;
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  vView = mv.xyz;
+  vNormalV = normalize(normalMatrix * normal);
+  gl_Position = projectionMatrix * mv;
   #include <logdepthbuf_vertex>
 }
 `;
@@ -60,8 +66,8 @@ export const sunFragment = /* glsl */ `
 uniform sampler2D uMap;
 uniform float uTime;
 varying vec2 vUv;
-varying vec3 vWorld;
-varying vec3 vNormalW;
+varying vec3 vView;
+varying vec3 vNormalV;
 varying vec3 vObj;
 ${noise3D}
 void main(){
@@ -76,7 +82,7 @@ void main(){
   vec3 col = mix(vec3(1.0, 0.32, 0.04), vec3(1.0, 0.78, 0.42), smoothstep(0.15, 0.85, heat));
   col = mix(col, vec3(1.0, 0.95, 0.85), smoothstep(0.9, 1.3, heat));
   // Limb darkening (Eddington approximation).
-  float mu = clamp(dot(normalize(vNormalW), normalize(cameraPosition - vWorld)), 0.0, 1.0);
+  float mu = clamp(dot(normalize(vNormalV), normalize(-vView)), 0.0, 1.0);
   float limb = 0.4 + 0.6 * mu;
   gl_FragColor = vec4(col * limb * 2.1, 1.0);
 }
@@ -116,11 +122,11 @@ void main(){
 export const atmosphereVertex = /* glsl */ `
 #include <common>
 #include <logdepthbuf_pars_vertex>
-varying vec3 vWorld;
+varying vec3 vView;
 void main(){
-  vec4 wp = modelMatrix * vec4(position, 1.0);
-  vWorld = wp.xyz;
-  gl_Position = projectionMatrix * viewMatrix * wp;
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  vView = mv.xyz;
+  gl_Position = projectionMatrix * mv;
   #include <logdepthbuf_vertex>
 }
 `;
@@ -137,12 +143,12 @@ uniform vec3 uSunset;
 uniform float uIntensity;
 uniform float uFalloff;
 uniform float uMie;
-varying vec3 vWorld;
+varying vec3 vView;
 ${raySphere}
 void main(){
   #include <logdepthbuf_fragment>
-  vec3 ro = cameraPosition;
-  vec3 rd = normalize(vWorld - ro);
+  vec3 ro = vec3(0.0);
+  vec3 rd = normalize(vView);
   vec2 ta = raySphere(ro, rd, uCenter, uRa);
   if (ta.y < 0.0) discard;
   float t0 = max(ta.x, 0.0);
@@ -188,13 +194,13 @@ uniform vec3 uSunPos;
 uniform float uCloudShift;
 uniform float uAmbient;
 varying vec2 vUv;
-varying vec3 vWorld;
-varying vec3 vNormalW;
+varying vec3 vView;
+varying vec3 vNormalV;
 void main(){
   #include <logdepthbuf_fragment>
-  vec3 n = normalize(vNormalW);
-  vec3 L = normalize(uSunPos - vWorld);
-  vec3 V = normalize(cameraPosition - vWorld);
+  vec3 n = normalize(vNormalV);
+  vec3 L = normalize(uSunPos - vView);
+  vec3 V = normalize(-vView);
   float NdL = dot(n, L);
   vec3 day = texture2D(uDay, vUv).rgb;
   vec3 night = texture2D(uNight, vUv).rgb;
@@ -221,15 +227,15 @@ void main(){
 export const ringVertex = /* glsl */ `
 #include <common>
 #include <logdepthbuf_pars_vertex>
-varying vec3 vWorld;
+varying vec3 vView;
 varying float vR;
 uniform float uInner;
 uniform float uOuter;
 void main(){
   vR = (length(position.xy) - uInner) / (uOuter - uInner);
-  vec4 wp = modelMatrix * vec4(position, 1.0);
-  vWorld = wp.xyz;
-  gl_Position = projectionMatrix * viewMatrix * wp;
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  vView = mv.xyz;
+  gl_Position = projectionMatrix * mv;
   #include <logdepthbuf_vertex>
 }
 `;
@@ -242,7 +248,7 @@ uniform vec3 uCenter;
 uniform vec3 uNormal;
 uniform float uPlanetR;
 uniform float uAmbient;
-varying vec3 vWorld;
+varying vec3 vView;
 varying float vR;
 ${raySphere}
 void main(){
@@ -251,10 +257,10 @@ void main(){
   vec4 t = texture2D(uMap, vec2(vR, 0.5));
   float alpha = t.a;
   if (alpha < 0.01) discard;
-  vec3 L = normalize(uSunPos - vWorld);
-  vec3 V = normalize(cameraPosition - vWorld);
+  vec3 L = normalize(uSunPos - vView);
+  vec3 V = normalize(-vView);
   // Planet shadow on rings.
-  vec2 hit = raySphere(vWorld, L, uCenter, uPlanetR);
+  vec2 hit = raySphere(vView, L, uCenter, uPlanetR);
   float lit = hit.x > 0.0 ? 0.0 : 1.0;
   // Unlit face: only light diffusing through thin parts of the rings.
   float sameSide = sign(dot(L, uNormal)) * sign(dot(V, uNormal));

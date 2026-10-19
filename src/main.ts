@@ -8,7 +8,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import {
   AU_KM, DEG, LIGHT_KM_S, dateFromDays, daysFromDate, elementsAt, keplerPosition, localToLatLon, moonPosition,
-  orbitalPosition, sceneDistance, surfaceDistanceKm,
+  orbitalPosition, surfaceDistanceKm,
 } from './astro';
 import { SolarSystem, type Body } from './scene/SolarSystem';
 import { AsteroidBelt, KuiperBelt, createSky } from './scene/Environment';
@@ -18,6 +18,7 @@ import type { Site } from './data/bodies';
 import { REGIONS, type RegionDef } from './data/regions';
 import { categoryOf, shapeOf } from './data/siteShapes';
 import { SiteOutline } from './scene/SiteOutlines';
+import { helioDistance, scale, stepScale, systemFactor } from './scene/scale';
 import { applyStatic, fmtNum, lang, onLangChange, t } from './i18n';
 import { bodyL, regionL } from './data/localize';
 
@@ -33,7 +34,8 @@ const labelRenderer = new CSS2DRenderer({ element: document.querySelector<HTMLEl
 labelRenderer.setSize(window.innerWidth, window.innerHeight);
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.0005, 20000);
+// Far plane covers true-scale distances (Eris at aphelion ≈ 2.3 million Earth radii).
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.0005, 5e7);
 camera.position.set(0, 2200, 3600);
 
 const controls = new OrbitControls(camera, renderer.domElement);
@@ -120,6 +122,7 @@ const ui = new UI({
     lightAuto = false;
     ui.setToggle('light', lightBoost);
   },
+  toggleScale: () => setScaleMode(scale.target === 0),
   toggleOrbits: () => {
     showOrbits = !showOrbits;
     ui.setToggle('orbits', showOrbits);
@@ -165,8 +168,7 @@ const regionAnchors = new Map<string, THREE.Object3D>();
 const regionLabels: CSS2DObject[] = [];
 for (const r of REGIONS) {
   const anchor = new THREE.Object3D();
-  const s = sceneDistance(r.au);
-  anchor.position.set(Math.cos(r.lon * DEG) * s, 0, -Math.sin(r.lon * DEG) * s);
+  placeRegion(anchor, r);
   const el = document.createElement('div');
   el.className = 'body-label region';
   el.innerHTML = `<span class="dot" style="--c:${r.color}"></span><span class="name">${regionL(r).name}</span>`;
@@ -226,6 +228,14 @@ function applyLanguage() {
 // ── Navigation ──────────────────────────────────────────────────────────────────
 const OVERVIEW = new THREE.Vector3(0, 300, 470);
 
+function placeRegion(anchor: THREE.Object3D, r: RegionDef) {
+  const s = helioDistance(r.au);
+  anchor.position.set(Math.cos(r.lon * DEG) * s, 0, -Math.sin(r.lon * DEG) * s);
+}
+
+/** Overview vantage scaled with the system (illustrative → true scale). */
+const overview = () => OVERVIEW.clone().multiplyScalar(systemFactor());
+
 function leaveSite() {
   clearAutoLight();
   // Restore the time warp that was active before inspecting a site.
@@ -246,7 +256,8 @@ function goSystem() {
   ui.showSystem();
   ui.hint(t('hintSystem'));
   director.flyTo({
-    anchor: null, position: OVERVIEW.clone(), target: new THREE.Vector3(), minDistance: 30, maxDistance: 3000,
+    anchor: null, position: overview(), target: new THREE.Vector3(),
+    minDistance: system.get('sun').radius * 1.6, maxDistance: 3000 * systemFactor(),
     avoid: { center: () => new THREE.Vector3(), radius: system.get('sun').radius * 1.3 },
     pullBack: true,
   });
@@ -267,8 +278,16 @@ function focusRegion(r: RegionDef) {
   ui.hint(t('hintRegion'));
   const target = regionAnchors.get(r.id)!.position.clone();
   const dir = target.clone().normalize();
-  const position = dir.clone().multiplyScalar(sceneDistance(r.viewAu)).add(new THREE.Vector3(0, r.viewHeight, 0));
-  director.flyTo({ anchor: null, position, target, minDistance: 5, maxDistance: 1500 });
+  const position = dir.clone().multiplyScalar(helioDistance(r.viewAu)).add(new THREE.Vector3(0, r.viewHeight * systemFactor(), 0));
+  director.flyTo({ anchor: null, position, target, minDistance: 5 * systemFactor(), maxDistance: 1500 * systemFactor() });
+}
+
+/** How far the camera may pull back from a body: far enough to see its whole moon system. */
+function bodyMaxDistance(b: Body) {
+  const base = b.radius * (b.def.id === 'sun' ? 25 : b.def.group === 'planet' ? 40 : 60);
+  const moons = system.bodies.filter((m) => m.parent === b && m.def.group === 'moon');
+  const extent = Math.max(0, ...moons.map((m) => m.root.position.length()));
+  return Math.max(base, extent * 3);
 }
 
 function focusBody(b: Body) {
@@ -309,7 +328,7 @@ function focusBody(b: Body) {
     position: center.clone().addScaledVector(dir, dist),
     target: center,
     minDistance: R * 1.2,
-    maxDistance: R * (b.def.id === 'sun' ? 25 : b.def.group === 'planet' ? 40 : 60),
+    maxDistance: bodyMaxDistance(b),
     avoid: { center: () => b.getWorldPosition(), radius: R * 1.08 },
   });
 }
@@ -642,6 +661,8 @@ window.addEventListener('keydown', (e) => {
     lightBoost = !lightBoost;
     lightAuto = false;
     ui.setToggle('light', lightBoost);
+  } else if (e.key === 'm' || e.key === 'M' || e.key === 'ь' || e.key === 'Ь') {
+    setScaleMode(scale.target === 0);
   } else if (e.key === 'i' || e.key === 'I' || e.key === 'ш' || e.key === 'Ш') {
     ui.toggleCollapsed();
   } else if (e.key === ' ') {
@@ -785,6 +806,48 @@ function frameFreeArea(dt: number) {
   }
 }
 
+// ── Scale mode ──────────────────────────────────────────────────────────────────
+function setScaleMode(real: boolean) {
+  scale.target = real ? 1 : 0;
+  ui.setToggle('scale', real);
+}
+
+/**
+ * Keep the framing while the scale animates: in the overview the camera scales with the
+ * system, next to a body the camera's offset scales with the body.
+ */
+let lastFactor = 1;
+let lastBodyScale = 1;
+let lastFocus: Body | null = null;
+function followScale() {
+  const factor = systemFactor();
+  const bodyScale = focused?.sizeScale ?? 1;
+  if (focused !== lastFocus) {
+    lastFocus = focused;
+    lastBodyScale = bodyScale;
+  }
+  if (!director.flying) {
+    if ((mode === 'system' || mode === 'region') && factor !== lastFactor) {
+      const k = factor / lastFactor;
+      camera.position.multiplyScalar(k);
+      controls.target.multiplyScalar(k);
+      controls.minDistance *= k;
+      controls.maxDistance *= k;
+    } else if (focused && bodyScale !== lastBodyScale) {
+      const k = bodyScale / lastBodyScale;
+      const c = focused.getWorldPosition(tmpA);
+      camera.position.sub(c).multiplyScalar(k).add(c);
+      controls.target.sub(c).multiplyScalar(k).add(c);
+      controls.minDistance *= k;
+      controls.maxDistance *= k;
+    }
+    // Moon systems spread out at true scale: allow pulling back far enough to see them.
+    if (focused && mode === 'body') controls.maxDistance = bodyMaxDistance(focused);
+  }
+  lastFactor = factor;
+  lastBodyScale = bodyScale;
+}
+
 // ── Main loop ───────────────────────────────────────────────────────────────────
 const timer = new THREE.Timer();
 timer.connect(document);
@@ -798,6 +861,7 @@ function frame(now: number) {
   if (speed <= SPIN_EXACT_MAX) spinDays = simDays;
   else spinDays += SPIN_EXACT_MAX * dt;
 
+  if (stepScale(dt)) for (const r of REGIONS) placeRegion(regionAnchors.get(r.id)!, r);
   system.update(simDays, spinDays, dt);
   belt.update(simDays);
   kuiper.update(simDays);
@@ -805,6 +869,7 @@ function frame(now: number) {
   system.setAmbient(ambient.intensity);
   scene.updateMatrixWorld();
   if (started) director.update(dt);
+  followScale();
   system.syncUniforms(timer.getElapsed(), camera);
   // Screen-space bloom would flood the frame when the Sun is large; fade it with apparent size.
   const sunAngular = system.get('sun').radius / camera.position.length();
