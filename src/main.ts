@@ -624,6 +624,7 @@ function updateMarkers() {
       const m = b.orbitLine.material as THREE.LineBasicMaterial;
       m.opacity = b === hovered || isFocused ? 0.6 : mode === 'system' ? 0.22 : b.def.group === 'moon' ? 0.18 : 0.1;
     }
+    b.axis.visible = showOrbits && isFocused;
     const showSites = isFocused && !director.flying;
     for (const [id, outline] of b.siteOutlines) {
       const hot = id === mapHoverSite || id === panelHoverSite;

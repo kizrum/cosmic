@@ -70,6 +70,7 @@ export class Body {
   surface!: THREE.Mesh;
   label!: CSS2DObject;
   orbitLine?: THREE.Line;
+  readonly axis: THREE.Line;
   readonly siteAnchors = new Map<string, THREE.Object3D>();
   readonly siteMarkers = new Map<string, CSS2DObject>();
   readonly siteOutlines = new Map<string, SiteOutline>();
@@ -100,6 +101,14 @@ export class Body {
     this.root.name = def.id;
     this.root.add(this.tilt);
     this.tilt.add(this.spin);
+    // Rotation axis through the poles (local +Y of the equatorial frame); shown for the focused body.
+    const ext = this.radius * (def.id === 'saturn' ? 2.6 : 1.6);
+    this.axis = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -ext, 0), new THREE.Vector3(0, ext, 0)]),
+      new THREE.LineBasicMaterial({ color: def.color, transparent: true, opacity: 0.55, depthWrite: false }),
+    );
+    this.axis.visible = false;
+    this.tilt.add(this.axis);
   }
 
   getWorldPosition(out = new THREE.Vector3()) {
