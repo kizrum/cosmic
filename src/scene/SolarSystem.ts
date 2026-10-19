@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import type { SiteOutline } from './SiteOutlines';
 import { BODIES, type BodyDef, type Site } from '../data/bodies';
 import {
   DEG, basisFromPole, elementsAt, equToScene, keplerPosition, latLonToLocal, moonPosition, orbitNormal,
@@ -71,6 +72,7 @@ export class Body {
   orbitLine?: THREE.Line;
   readonly siteAnchors = new Map<string, THREE.Object3D>();
   readonly siteMarkers = new Map<string, CSS2DObject>();
+  readonly siteOutlines = new Map<string, SiteOutline>();
   readonly uniforms: { [k: string]: THREE.IUniform }[] = [];
   clouds?: THREE.Mesh;
   cloudOpacityTarget = 1;
@@ -102,6 +104,12 @@ export class Body {
 
   getWorldPosition(out = new THREE.Vector3()) {
     return this.root.getWorldPosition(out);
+  }
+
+  /** Radius (body-fixed units) at which surface overlays are drawn: just above clouds/haze. */
+  overlayRadius() {
+    const cloudR = this.clouds ? (this.clouds.geometry as THREE.SphereGeometry).parameters.radius : this.geoRadius;
+    return Math.max(cloudR, this.geoRadius) * 1.004;
   }
 
   addSite(site: Site) {

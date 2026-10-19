@@ -2,6 +2,9 @@ import { BODIES, bodyById, type BodyDef, type Site } from '../data/bodies';
 import { REGIONS, type RegionDef } from '../data/regions';
 import { CREDITS, NOTICES } from '../data/credits';
 import { formatLatLon } from '../astro';
+import { scienceOf } from '../data/science';
+import { categoryOf, type SiteCategory } from '../data/siteShapes';
+import { featureChips, statTiles, structureView } from './scienceViews';
 
 export const TIME_PRESETS: { label: string; title: string; days: number }[] = [
   { label: '❚❚', title: 'Пауза', days: 0 },
@@ -44,6 +47,7 @@ const moonsOf = (id: string) => BODIES.filter((b) => b.parent === id);
 interface PanelTab {
   id: string;
   label: string;
+  count?: number;
   html: string;
 }
 
@@ -51,6 +55,8 @@ export interface UIHandlers {
   selectBody(id: string): void;
   selectSite(bodyId: string, siteId: string): void;
   selectRegion(id: string): void;
+  /** Pointer over a site entry in the panel (null when it leaves). */
+  hoverSite(id: string | null): void;
   goSystem(): void;
   goBody(): void;
   setSpeed(index: number): void;
@@ -97,6 +103,11 @@ export class UI {
       const back = t.closest<HTMLElement>('[data-back]');
       if (back) (back.dataset.back === 'system' ? h.goSystem : h.goBody)();
     });
+    this.panel.addEventListener('pointerover', (e) => {
+      const el = (e.target as HTMLElement).closest<HTMLElement>('.sites [data-site]');
+      h.hoverSite(el ? el.dataset.site! : null);
+    });
+    this.panel.addEventListener('pointerleave', () => h.hoverSite(null));
     this.crumbs.addEventListener('click', (e) => {
       const el = (e.target as HTMLElement).closest<HTMLElement>('[data-crumb]');
       if (!el) return;
@@ -237,7 +248,7 @@ export class UI {
     const tabs = spec.tabs.filter((t) => t.html.trim());
     const active = tabs.find((t) => t.id === this.lastTab) ?? tabs[0];
     const bar = tabs.length > 1
-      ? `<nav class="tabs">${tabs.map((t) => `<button data-tab="${t.id}" class="${t === active ? 'on' : ''}">${t.label}</button>`).join('')}</nav>`
+      ? `<nav class="tabs">${tabs.map((t) => `<button data-tab="${t.id}" class="${t === active ? 'on' : ''}">${t.label}${t.count ? `<sup>${t.count}</sup>` : ''}</button>`).join('')}</nav>`
       : '';
     this.panel.innerHTML = `
       <div class="ph">
@@ -307,37 +318,46 @@ export class UI {
   showBody(b: BodyDef) {
     this.setCrumbs(b);
     this.setActiveBody(b.id);
+    const sci = scienceOf(b.id);
     const moons = moonsOf(b.id);
     const moonList = moons.length
-      ? `<h3>Спутники <span class="count">${moons.length}</span></h3>
-         <ul class="moons">${moons
-           .map((m) => `<li><button data-body="${m.id}" style="--c:${m.color}"><span class="dot"></span>${m.name}</button></li>`)
-           .join('')}</ul>`
+      ? `<ul class="moon-grid">${moons
+          .map((m) => `<li><button data-body="${m.id}" style="--c:${m.color}">
+            <span class="dot"></span><b>${m.name}</b><small>${esc(m.kind)} · R ${Math.round(m.radiusKm).toLocaleString('ru-RU')} км</small></button></li>`)
+          .join('')}</ul>`
       : '';
     const parent = b.parent
       ? `<button class="near" data-body="${b.parent}"><span>Обращается вокруг</span><b>${bodyById(b.parent).name}</b></button>`
       : '';
+    const cats = new Map<string, SiteCategory>();
     const siteList = b.sites.length
       ? `<ul class="sites">${b.sites
-          .map(
-            (s, i) => `<li><button data-body="${b.id}" data-site="${s.id}">
+          .map((s, i) => {
+            const c = categoryOf(s, b.id);
+            cats.set(c.id, c);
+            return `<li><button data-body="${b.id}" data-site="${s.id}" style="--cc:${c.color}">
               <span class="idx">${String(i + 1).padStart(2, '0')}</span>
-              <span class="sn">${esc(s.name)}</span><span class="sk">${esc(s.kind)}</span></button></li>`,
-          )
+              <span class="sn">${esc(s.name)}</span><span class="sk">${esc(s.kind)}</span></button></li>`;
+          })
           .join('')}</ul>`
+      : '';
+    const legend = cats.size
+      ? `<ul class="legend">${[...cats.values()].map((c) => `<li style="--cc:${c.color}">${c.label}</li>`).join('')}</ul>`
       : '';
     const sites = b.group === 'star'
       ? `<p class="tip">Поверхность Солнца — плазма, отдельных районов для посадки нет. Выберите планету.</p>`
-      : `${siteList}<p class="tip">Нажмите на ${b.sites.length ? 'маркер или на ' : ''}любую точку поверхности, чтобы просканировать её.</p>`;
+      : `${legend}${siteList}<p class="tip">${b.sites.length ? 'Районы обведены на поверхности: наведите курсор, чтобы подсветить, и нажмите, чтобы изучить. ' : ''}Нажмите на любую другую точку, чтобы просканировать её.</p>`;
     this.open({
       header: `<div class="kind" style="--c:${b.color}">${esc(b.kind)}</div><h2>${b.name}<small>${b.latin}</small></h2>`,
       tabs: [
         {
           id: 'overview', label: 'Обзор',
-          html: `<p class="desc">${esc(b.description)}</p>${b.note ? `<p class="note-data">${esc(b.note)}</p>` : ''}${parent}${moonList}`,
+          html: `${sci ? featureChips(sci) : ''}<p class="desc">${esc(b.description)}</p>${b.note ? `<p class="note-data">${esc(b.note)}</p>` : ''}${sci ? statTiles(b, sci) : ''}${parent}`,
         },
+        { id: 'structure', label: 'Строение', html: sci ? structureView(b, sci) : '' },
         { id: 'facts', label: 'Факты', html: factsTable(b.facts) },
-        { id: 'sites', label: b.sites.length ? `Районы · ${b.sites.length}` : 'Районы', html: sites },
+        { id: 'sites', label: 'Районы', count: b.sites.length, html: sites },
+        { id: 'moons', label: 'Спутники', count: moons.length, html: moonList },
       ],
       back: '<button class="back" data-back="system">← К системе</button>',
     });

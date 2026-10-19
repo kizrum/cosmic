@@ -16,6 +16,8 @@ import { CameraDirector } from './CameraDirector';
 import { TIME_PRESETS, UI, type LiveStat } from './ui/UI';
 import type { Site } from './data/bodies';
 import { REGIONS, type RegionDef } from './data/regions';
+import { categoryOf, shapeOf } from './data/siteShapes';
+import { SiteOutline } from './scene/SiteOutlines';
 
 // ── Renderer & scene ────────────────────────────────────────────────────────────
 const canvas = document.querySelector<HTMLCanvasElement>('#scene')!;
@@ -98,6 +100,7 @@ const ui = new UI({
     if (s) focusSite(b, s);
   },
   selectRegion: (id) => focusRegion(REGIONS.find((r) => r.id === id)!),
+  hoverSite: (id) => (panelHoverSite = id),
   goSystem,
   goBody: () => focused && focusBody(focused),
   setSpeed,
@@ -132,13 +135,23 @@ for (const b of system.bodies) {
     focusBody(b);
   });
   for (const site of b.def.sites) {
+    const cat = categoryOf(site, b.def.id);
     const el = document.createElement('button');
     el.className = 'site-marker';
+    el.style.setProperty('--mc', cat.color);
     el.innerHTML = `<i></i><span>${site.name}</span>`;
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       focusSite(b, site);
     });
+    el.addEventListener('pointerenter', () => (mapHoverSite = site.id));
+    el.addEventListener('pointerleave', () => (mapHoverSite = null));
+    const shape = shapeOf(b.def.id, site.id);
+    if (shape) {
+      const outline = new SiteOutline(shape, [site.lat, site.lon], b.def.radiusKm, b.overlayRadius(), cat.color);
+      b.spin.add(outline.group);
+      b.siteOutlines.set(site.id, outline);
+    }
     const marker = new CSS2DObject(el);
     marker.visible = false;
     b.siteAnchors.get(site.id)!.add(marker);
@@ -473,6 +486,24 @@ const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 let downAt: { x: number; y: number } | null = null;
 let hovered: Body | null = null;
+/** Site under the pointer on the map / in the panel list. */
+let mapHoverSite: string | null = null;
+let panelHoverSite: string | null = null;
+
+/** Smallest outlined site containing a surface point of the focused body. */
+function siteAtSurface(b: Body, worldPoint: THREE.Vector3): Site | null {
+  const { lat, lon } = localToLatLon(b.spin.worldToLocal(worldPoint.clone()));
+  let best: Site | null = null;
+  let bestArea = Infinity;
+  for (const site of b.def.sites) {
+    const o = b.siteOutlines.get(site.id);
+    if (o && o.area < bestArea && o.contains(lat, lon)) {
+      best = site;
+      bestArea = o.area;
+    }
+  }
+  return best;
+}
 
 function pickBody(x: number, y: number): Body | null {
   let best: Body | null = null;
@@ -514,7 +545,10 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   ui.setNavOpen(false);
   const hit = pickSurface(e.clientX, e.clientY);
   if (hit) {
-    scanPoint(focused!, hit.point);
+    // Clicking inside an outlined region opens that region; elsewhere scans the point.
+    const site = siteAtSurface(focused!, hit.point);
+    if (site && site !== focusedSite) focusSite(focused!, site);
+    else if (!site) scanPoint(focused!, hit.point);
     return;
   }
   const b = pickBody(e.clientX, e.clientY);
@@ -522,7 +556,9 @@ renderer.domElement.addEventListener('pointerup', (e) => {
 });
 renderer.domElement.addEventListener('pointermove', (e) => {
   if (e.buttons) return;
-  const b = pickSurface(e.clientX, e.clientY) ? focused : pickBody(e.clientX, e.clientY);
+  const surf = pickSurface(e.clientX, e.clientY);
+  mapHoverSite = surf && focused ? siteAtSurface(focused, surf.point)?.id ?? null : null;
+  const b = surf ? focused : pickBody(e.clientX, e.clientY);
   if (b !== hovered) {
     hovered?.label.element.classList.remove('hover');
     hovered = b;
@@ -588,10 +624,16 @@ function updateMarkers() {
       const m = b.orbitLine.material as THREE.LineBasicMaterial;
       m.opacity = b === hovered || isFocused ? 0.6 : mode === 'system' ? 0.22 : b.def.group === 'moon' ? 0.18 : 0.1;
     }
+    const showSites = isFocused && !director.flying;
+    for (const [id, outline] of b.siteOutlines) {
+      const hot = id === mapHoverSite || id === panelHoverSite;
+      outline.setState(!showSites ? 'hidden' : focusedSite?.id === id ? 'active' : hot ? 'hover' : 'idle');
+    }
     for (const [id, marker] of b.siteMarkers) {
-      marker.visible = isFocused && !director.flying;
+      marker.visible = showSites;
       if (!marker.visible) continue;
       marker.element.classList.toggle('current', focusedSite?.id === id);
+      marker.element.classList.toggle('hot', id === mapHoverSite || id === panelHoverSite);
       // Hidden when the body is between the camera and the marker.
       const p = marker.parent!.getWorldPosition(tmpB);
       occluder.set(b.getWorldPosition(tmpA), b.geoRadius * 0.97 * Math.min(b.spin.scale.x, b.spin.scale.y, b.spin.scale.z));
@@ -633,7 +675,11 @@ function layoutLabels() {
     items.push({ el, x: (labelPos.x + 1) * halfW, y: (1 - labelPos.y) * halfH, s, prio, size: radius });
   };
   for (const b of system.bodies) add(b.label, b.radius, LABEL_PRIORITY[b.def.group] ?? 5);
-  for (const l of regionLabels) add(l, 0, 3);
+  // Belt labels float in empty space: show them only in the overview, never over a planet.
+  for (const l of regionLabels) {
+    l.visible = mode === 'system' || mode === 'region';
+    add(l, 0, 3);
+  }
 
   items.sort((a, b) => a.prio - b.prio || b.size - a.size);
   const placed: { x0: number; x1: number; y0: number; y1: number }[] = [];
