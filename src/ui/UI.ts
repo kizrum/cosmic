@@ -41,6 +41,12 @@ const factsTable = (facts: [string, string][] | LiveStat[]) =>
 
 const moonsOf = (id: string) => BODIES.filter((b) => b.parent === id);
 
+interface PanelTab {
+  id: string;
+  label: string;
+  html: string;
+}
+
 export interface UIHandlers {
   selectBody(id: string): void;
   selectSite(bodyId: string, siteId: string): void;
@@ -61,6 +67,17 @@ export class UI {
   private readonly dateInput = $<HTMLInputElement>('#date-input');
   private readonly live = () => this.panel.querySelector('.live') as HTMLElement | null;
   private lastDate = '';
+  private lastTab = 'overview';
+  /** Small windows start with the details folded away; the viewer's choice is remembered. */
+  private collapsed = (() => {
+    try {
+      const v = localStorage.getItem('cosmic.panelCollapsed');
+      if (v !== null) return v === '1';
+    } catch {
+      /* storage unavailable */
+    }
+    return window.innerWidth < 1280 || window.innerHeight < 760;
+  })();
 
   constructor(private readonly h: UIHandlers) {
     this.buildNav();
@@ -70,6 +87,9 @@ export class UI {
     $('#btn-orbits').addEventListener('click', () => h.toggleOrbits());
     this.panel.addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
+      const tab = t.closest<HTMLElement>('[data-tab]');
+      if (tab) return this.selectTab(tab.dataset.tab!);
+      if (t.closest('[data-collapse]')) return this.setCollapsed(!this.collapsed);
       const site = t.closest<HTMLElement>('[data-site]');
       if (site) return h.selectSite(site.dataset.body!, site.dataset.site!);
       const body = t.closest<HTMLElement>('[data-body]');
@@ -102,10 +122,22 @@ export class UI {
     $('#nav-groups').addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
       const btn = t.closest<HTMLElement>('[data-body]');
-      if (btn) return this.h.selectBody(btn.dataset.body!);
       const reg = t.closest<HTMLElement>('[data-region]');
-      if (reg) this.h.selectRegion(reg.dataset.region!);
+      if (btn) this.h.selectBody(btn.dataset.body!);
+      else if (reg) this.h.selectRegion(reg.dataset.region!);
+      else return;
+      this.setNavOpen(false);
     });
+    $('#nav-toggle').addEventListener('click', () => this.setNavOpen(!this.navOpen));
+  }
+
+  get navOpen() {
+    return $('#nav').classList.contains('open');
+  }
+
+  setNavOpen(open: boolean) {
+    $('#nav').classList.toggle('open', open);
+    $('#nav-toggle').setAttribute('aria-expanded', String(open));
   }
 
   private subList(parentId: string) {
@@ -197,12 +229,60 @@ export class UI {
     this.crumbs.innerHTML = parts.join('<span class="sep">›</span>');
   }
 
-  private open(html: string) {
-    this.panel.innerHTML = html;
+  /**
+   * Panel layout: an always-visible header (title + live data) and tabbed details that can
+   * be collapsed. The collapsed state is remembered per viewer.
+   */
+  private open(spec: { header: string; status?: string; tabs: PanelTab[]; back?: string }) {
+    const tabs = spec.tabs.filter((t) => t.html.trim());
+    const active = tabs.find((t) => t.id === this.lastTab) ?? tabs[0];
+    const bar = tabs.length > 1
+      ? `<nav class="tabs">${tabs.map((t) => `<button data-tab="${t.id}" class="${t === active ? 'on' : ''}">${t.label}</button>`).join('')}</nav>`
+      : '';
+    this.panel.innerHTML = `
+      <div class="ph">
+        ${spec.header}
+        <button class="collapse" data-collapse title="Свернуть / развернуть (I)" aria-label="Свернуть"><i></i></button>
+      </div>
+      ${spec.status ?? ''}
+      <div class="live"></div>
+      ${bar}
+      <div class="tab-body">
+        ${tabs.map((t) => `<section data-pane="${t.id}" ${t === active ? '' : 'hidden'}>${t.html}</section>`).join('')}
+        ${spec.back ?? ''}
+      </div>`;
+    this.panel.classList.toggle('collapsed', this.collapsed);
     this.panel.classList.remove('show');
     void this.panel.offsetWidth; // restart the reveal animation
     this.panel.classList.add('show');
     this.panel.scrollTop = 0;
+  }
+
+  private selectTab(id: string) {
+    this.lastTab = id;
+    this.panel.querySelectorAll<HTMLElement>('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
+    this.panel.querySelectorAll<HTMLElement>('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== id));
+    this.setCollapsed(false);
+    this.panel.scrollTop = 0;
+  }
+
+  setCollapsed(collapsed: boolean) {
+    this.collapsed = collapsed;
+    this.panel.classList.toggle('collapsed', collapsed);
+    try {
+      localStorage.setItem('cosmic.panelCollapsed', collapsed ? '1' : '0');
+    } catch {
+      /* storage unavailable: keep the in-memory state */
+    }
+  }
+
+  toggleCollapsed() {
+    if (this.panel.classList.contains('show')) this.setCollapsed(!this.collapsed);
+  }
+
+  /** Screen area covered by the panel (used to frame the camera), or null. */
+  occlusion(): DOMRect | null {
+    return this.panel.classList.contains('show') ? this.panel.getBoundingClientRect() : null;
   }
 
   showSystem() {
@@ -214,14 +294,14 @@ export class UI {
   showRegion(r: RegionDef) {
     this.crumbs.innerHTML = `<button data-crumb="system">Солнечная система</button><span class="sep">›</span><span class="cur">${r.name}</span>`;
     this.setActiveRegion(r.id);
-    this.open(`
-      <div class="ph">
-        <div class="kind" style="--c:${r.color}">${esc(r.kind)}</div>
-        <h2>${r.name}<small>${r.latin}</small></h2>
-      </div>
-      <p class="desc">${esc(r.description)}</p>
-      ${factsTable(r.facts)}
-      <button class="back" data-back="system">← К системе</button>`);
+    this.open({
+      header: `<div class="kind" style="--c:${r.color}">${esc(r.kind)}</div><h2>${r.name}<small>${r.latin}</small></h2>`,
+      tabs: [
+        { id: 'overview', label: 'Обзор', html: `<p class="desc">${esc(r.description)}</p>` },
+        { id: 'facts', label: 'Факты', html: factsTable(r.facts) },
+      ],
+      back: '<button class="back" data-back="system">← К системе</button>',
+    });
   }
 
   showBody(b: BodyDef) {
@@ -237,48 +317,41 @@ export class UI {
     const parent = b.parent
       ? `<button class="near" data-body="${b.parent}"><span>Обращается вокруг</span><b>${bodyById(b.parent).name}</b></button>`
       : '';
-    const sites = b.sites.length
-      ? `<h3>Районы для изучения <span class="count">${b.sites.length}</span></h3>
-         <ul class="sites">${b.sites
-           .map(
-             (s, i) => `<li><button data-body="${b.id}" data-site="${s.id}">
-               <span class="idx">${String(i + 1).padStart(2, '0')}</span>
-               <span class="sn">${esc(s.name)}</span><span class="sk">${esc(s.kind)}</span></button></li>`,
-           )
-           .join('')}</ul>
-         <p class="tip">Нажмите на маркер или на любую точку поверхности, чтобы просканировать её.</p>`
-      : b.group === 'star'
-        ? `<p class="tip">Поверхность Солнца — плазма, отдельных районов для посадки нет. Выберите планету.</p>`
-        : `<p class="tip">Нажмите на любую точку поверхности, чтобы просканировать её.</p>`;
-    this.open(`
-      <div class="ph">
-        <div class="kind" style="--c:${b.color}">${esc(b.kind)}</div>
-        <h2>${b.name}<small>${b.latin}</small></h2>
-      </div>
-      <div class="live"></div>
-      <p class="desc">${esc(b.description)}</p>
-      ${b.note ? `<p class="note-data">${esc(b.note)}</p>` : ''}
-      ${factsTable(b.facts)}
-      ${parent}
-      ${moonList}
-      ${sites}
-      <button class="back" data-back="system">← К системе</button>`);
+    const siteList = b.sites.length
+      ? `<ul class="sites">${b.sites
+          .map(
+            (s, i) => `<li><button data-body="${b.id}" data-site="${s.id}">
+              <span class="idx">${String(i + 1).padStart(2, '0')}</span>
+              <span class="sn">${esc(s.name)}</span><span class="sk">${esc(s.kind)}</span></button></li>`,
+          )
+          .join('')}</ul>`
+      : '';
+    const sites = b.group === 'star'
+      ? `<p class="tip">Поверхность Солнца — плазма, отдельных районов для посадки нет. Выберите планету.</p>`
+      : `${siteList}<p class="tip">Нажмите на ${b.sites.length ? 'маркер или на ' : ''}любую точку поверхности, чтобы просканировать её.</p>`;
+    this.open({
+      header: `<div class="kind" style="--c:${b.color}">${esc(b.kind)}</div><h2>${b.name}<small>${b.latin}</small></h2>`,
+      tabs: [
+        {
+          id: 'overview', label: 'Обзор',
+          html: `<p class="desc">${esc(b.description)}</p>${b.note ? `<p class="note-data">${esc(b.note)}</p>` : ''}${parent}${moonList}`,
+        },
+        { id: 'facts', label: 'Факты', html: factsTable(b.facts) },
+        { id: 'sites', label: b.sites.length ? `Районы · ${b.sites.length}` : 'Районы', html: sites },
+      ],
+      back: '<button class="back" data-back="system">← К системе</button>',
+    });
   }
 
   showSite(b: BodyDef, s: Site) {
     this.setCrumbs(b, s.name);
     const coord = s.elevation ? `${(b.radiusKm * s.elevation).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} км от центра, в плоскости колец` : formatLatLon(s.lat, s.lon);
-    this.open(`
-      <div class="ph">
-        <div class="kind" style="--c:${b.color}">${esc(s.kind)}</div>
-        <h2>${esc(s.name)}</h2>
-        <div class="coord">${b.name} · ${coord}</div>
-      </div>
-      <div class="scan"><span></span>Сканирование района…</div>
-      <div class="live"></div>
-      <p class="desc">${esc(s.description)}</p>
-      ${factsTable(s.facts ?? [])}
-      <button class="back" data-back="body">← К ${b.group === 'moon' ? 'спутнику' : 'планете'}</button>`);
+    this.open({
+      header: `<div class="kind" style="--c:${b.color}">${esc(s.kind)}</div><h2>${esc(s.name)}</h2><div class="coord">${b.name} · ${coord}</div>`,
+      status: '<div class="scan"><span></span>Сканирование района…</div>',
+      tabs: [{ id: 'overview', label: 'Обзор', html: `<p class="desc">${esc(s.description)}</p>${factsTable(s.facts ?? [])}` }],
+      back: `<button class="back" data-back="body">← К ${b.group === 'moon' ? 'спутнику' : 'планете'}</button>`,
+    });
   }
 
   showPoint(b: BodyDef, p: PointInfo) {
@@ -288,16 +361,12 @@ export class UI {
           <span>Ближайший изученный район</span><b>${esc(p.nearest.site.name)}</b>
           <em>${Math.round(p.nearest.km).toLocaleString('ru-RU')} км по поверхности</em></button>`
       : '';
-    this.open(`
-      <div class="ph">
-        <div class="kind" style="--c:${b.color}">Неисследованный сектор</div>
-        <h2>${formatLatLon(p.lat, p.lon)}</h2>
-        <div class="coord">${b.name}</div>
-      </div>
-      <div class="scan"><span></span>Сканирование сектора…</div>
-      <div class="live"></div>
-      ${near}
-      <button class="back" data-back="body">← Назад</button>`);
+    this.open({
+      header: `<div class="kind" style="--c:${b.color}">Неисследованный сектор</div><h2>${formatLatLon(p.lat, p.lon)}</h2><div class="coord">${b.name}</div>`,
+      status: '<div class="scan"><span></span>Сканирование сектора…</div>',
+      tabs: [{ id: 'overview', label: 'Обзор', html: near }],
+      back: '<button class="back" data-back="body">← Назад</button>',
+    });
     this.setLive(p.status);
   }
 

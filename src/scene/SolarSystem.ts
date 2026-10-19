@@ -47,7 +47,7 @@ const THIN_RINGS: Record<string, { rings: [number, number, number][]; color: num
   // Neptune: Galle, Le Verrier, Lassell, Arago, Adams.
   neptune: {
     color: 0x8a8a8a,
-    rings: [[41900, 2000, 0.08], [53200, 113, 0.3], [55200, 4000, 0.06], [57200, 100, 0.15], [62932, 50, 0.4]],
+    rings: [[41900, 2000, 0.025], [53200, 113, 0.25], [55200, 4000, 0.018], [57200, 100, 0.1], [62932, 50, 0.35]],
   },
   haumea: { color: 0xbfbfbf, rings: [[2287, 70, 0.55]] },
 };
@@ -338,6 +338,7 @@ export class SolarSystem {
       uCenter: { value: new THREE.Vector3() },
       uNormal: { value: new THREE.Vector3(0, 1, 0) },
       uPlanetR: { value: body.radius },
+      uAmbient: { value: 0.03 },
       uInner: { value: inner },
       uOuter: { value: outer },
     };
@@ -447,6 +448,16 @@ export class SolarSystem {
     if (this.orbitClock <= 0) {
       this.orbitClock = 0.5;
       for (const b of this.bodies) if (b.def.group === 'moon' && b.orbitLine) this.sampleOrbit(b, d);
+    }
+  }
+
+  /** Fill light for custom shaders (Earth, Saturn's rings), matching the scene's ambient light. */
+  setAmbient(intensity: number) {
+    for (const b of this.bodies) {
+      for (const u of b.uniforms) {
+        if (!u.uAmbient) continue;
+        u.uAmbient.value = b.def.id === 'earth' ? intensity * 0.32 : Math.max(0.03, intensity * 0.4);
+      }
     }
   }
 

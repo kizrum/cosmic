@@ -123,6 +123,9 @@ const ui = new UI({
 ui.setSpeedIndex(speedIndex);
 ui.setToggle('orbits', showOrbits);
 
+// Any click on the map (labels and markers included) hides the object list.
+document.querySelector('#labels')!.addEventListener('click', () => ui.setNavOpen(false), { capture: true });
+
 for (const b of system.bodies) {
   b.label.element.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -190,7 +193,7 @@ function goSystem() {
   setSurfaceView(null);
   probe.removeFromParent();
   ui.showSystem();
-  ui.hint('Выберите объект — кликом по нему, по метке или в списке слева');
+  ui.hint('Выберите объект — кликом по нему, по метке или в списке «Объекты»');
   director.flyTo({
     anchor: null, position: OVERVIEW.clone(), target: new THREE.Vector3(), minDistance: 30, maxDistance: 3000,
     avoid: { center: () => new THREE.Vector3(), radius: system.get('sun').radius * 1.3 },
@@ -508,6 +511,7 @@ renderer.domElement.addEventListener('pointerup', (e) => {
   const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y);
   downAt = null;
   if (moved > 5) return;
+  ui.setNavOpen(false);
   const hit = pickSurface(e.clientX, e.clientY);
   if (hit) {
     scanPoint(focused!, hit.point);
@@ -531,6 +535,10 @@ window.addEventListener('keydown', (e) => {
   if ((e.target as HTMLElement).tagName === 'INPUT') return;
   // Esc belongs to the credits dialog while it is open.
   if (document.querySelector<HTMLDialogElement>('#credits')!.open) return;
+  if (e.key === 'Escape' && ui.navOpen) {
+    ui.setNavOpen(false);
+    return;
+  }
   if (e.key === 'Escape' || e.key === 'Backspace') {
     if (mode === 'site' && focused) focusBody(focused);
     else if (mode === 'body' && focused?.def.group === 'moon' && focused.parent) focusBody(focused.parent);
@@ -539,6 +547,8 @@ window.addEventListener('keydown', (e) => {
     lightBoost = !lightBoost;
     lightAuto = false;
     ui.setToggle('light', lightBoost);
+  } else if (e.key === 'i' || e.key === 'I' || e.key === 'ш' || e.key === 'Ш') {
+    ui.toggleCollapsed();
   } else if (e.key === ' ') {
     setSpeed(speedIndex === 0 ? 1 : 0);
     e.preventDefault();
@@ -641,6 +651,30 @@ function layoutLabels() {
   }
 }
 
+/**
+ * Keep the subject centred in the part of the screen the info panel leaves free:
+ * the projection is shifted (setViewOffset), so camera flights and controls are unchanged.
+ */
+const viewShift = { x: 0, y: 0 };
+function frameFreeArea(dt: number) {
+  const W = window.innerWidth, H = window.innerHeight;
+  let tx = 0, ty = 0;
+  const occ = mode === 'system' ? null : ui.occlusion();
+  if (occ) {
+    const besideMiddle = occ.top < H * 0.6 && occ.bottom > H * 0.4;
+    if (occ.left > W * 0.4 && besideMiddle) tx = (W - occ.left) / 2; // side panel
+    else if (occ.top > H * 0.35 && occ.width > W * 0.6) ty = (H - occ.top) / 2; // bottom sheet
+  }
+  const k = Math.min(1, dt * 5);
+  viewShift.x += (tx - viewShift.x) * k;
+  viewShift.y += (ty - viewShift.y) * k;
+  if (Math.abs(viewShift.x) < 0.5 && Math.abs(viewShift.y) < 0.5) {
+    if (camera.view?.enabled) camera.clearViewOffset();
+  } else {
+    camera.setViewOffset(W, H, viewShift.x, viewShift.y, W, H);
+  }
+}
+
 // ── Main loop ───────────────────────────────────────────────────────────────────
 const timer = new THREE.Timer();
 timer.connect(document);
@@ -658,13 +692,14 @@ function frame(now: number) {
   belt.update(simDays);
   kuiper.update(simDays);
   ambient.intensity += ((lightBoost ? 0.9 : 0.05) - ambient.intensity) * Math.min(1, dt * 4);
-  system.get('earth').earthUniforms!.uAmbient.value = ambient.intensity * 0.32;
+  system.setAmbient(ambient.intensity);
   scene.updateMatrixWorld();
   if (started) director.update(dt);
   system.syncUniforms(timer.getElapsed(), camera);
   // Screen-space bloom would flood the frame when the Sun is large; fade it with apparent size.
   const sunAngular = system.get('sun').radius / camera.position.length();
   bloom.strength = THREE.MathUtils.lerp(0.75, 0.12, THREE.MathUtils.smoothstep(sunAngular, 0.04, 0.25));
+  frameFreeArea(dt);
   updateMarkers();
   refreshLive(dt);
   ui.setDate(dateFromDays(simDays));

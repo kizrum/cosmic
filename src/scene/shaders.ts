@@ -241,6 +241,7 @@ uniform vec3 uSunPos;
 uniform vec3 uCenter;
 uniform vec3 uNormal;
 uniform float uPlanetR;
+uniform float uAmbient;
 varying vec3 vWorld;
 varying float vR;
 ${raySphere}
@@ -260,7 +261,7 @@ void main(){
   float through = sameSide > 0.0 ? 1.0 : 0.45 * (1.0 - alpha) + 0.12;
   // Forward scattering brightens rings when looking toward the Sun.
   float fwd = 1.0 + 0.6 * pow(max(dot(-V, L), 0.0), 8.0);
-  vec3 col = t.rgb * (lit * through * fwd + 0.03);
+  vec3 col = t.rgb * (lit * through * fwd + uAmbient);
   gl_FragColor = vec4(col, alpha);
   #include <colorspace_fragment>
 }

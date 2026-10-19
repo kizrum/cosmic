@@ -27,12 +27,17 @@
         </div>
       </header>
 
-      <aside id="nav">
-        <div id="nav-groups"></div>
+      <div class="toolbar">
+        <button id="nav-toggle" aria-expanded="false" aria-controls="nav" title="Список объектов">
+          <span class="bars"><i></i><i></i><i></i></span>Объекты
+        </button>
         <div class="toggles">
           <button id="btn-orbits" title="Показать или скрыть орбиты">Орбиты</button>
           <button id="btn-light" title="Подсветка ночной стороны (L)">Подсветка</button>
         </div>
+      </div>
+      <aside id="nav">
+        <div id="nav-groups"></div>
       </aside>
 
       <section id="panel"></section>
