@@ -93,7 +93,7 @@ body.ready #hud { opacity: 1; }
 
 .topbar {
   position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: flex-start; gap: 24px;
-  padding: 18px 24px 40px; background: linear-gradient(rgba(2, 4, 10, .85), transparent); pointer-events: none;
+  padding: 18px 24px 30px; background: linear-gradient(rgba(2, 4, 10, .85), transparent); pointer-events: none;
 }
 .topbar > * { pointer-events: auto; }
 .brand { font-weight: 700; letter-spacing: .4em; font-size: 15px; display: flex; align-items: center; gap: 12px; white-space: nowrap; }
@@ -108,35 +108,49 @@ body.ready #hud { opacity: 1; }
 #crumbs .cur { color: var(--text); text-transform: uppercase; }
 #crumbs .sep { color: var(--line-strong); }
 
-.time { text-align: right; }
-#sim-date { font-family: var(--mono); font-size: 13px; color: var(--accent); letter-spacing: .04em; }
-.time-row { display: flex; gap: 6px; margin-top: 8px; justify-content: flex-end; }
+/* ── Time control: one compact strip ─────────────────────────── */
+.time {
+  position: relative; flex: none; display: flex; align-items: stretch; height: 30px; margin-top: -6px;
+  border: 1px solid var(--line); background: rgba(4, 9, 16, .6);
+}
+.time > * + *, .speed > * + * { border-left: 1px solid var(--line); }
+.time button { color: var(--muted); transition: color .15s, background .15s; }
+.time button:hover:not(:disabled) { color: var(--text); background: rgba(127, 227, 255, .08); }
+#btn-play { width: 32px; display: grid; place-items: center; }
+#btn-play i { width: 9px; height: 10px; border-left: 3px solid currentColor; border-right: 3px solid currentColor; }
+#btn-play.paused { color: var(--amber); }
+#btn-play.paused i { width: 0; height: 0; border: 0; border-left: 9px solid currentColor; border-top: 5.5px solid transparent; border-bottom: 5.5px solid transparent; margin-left: 2px; }
+.speed { display: flex; align-items: stretch; }
+.speed button { width: 22px; font-size: 16px; line-height: 1; }
+.speed button:disabled { opacity: .3; cursor: default; }
+#speed-label { min-width: 64px; display: grid; place-items: center; font-family: var(--mono); font-size: 11px; color: var(--accent); padding: 0 6px; }
+.time.paused #speed-label { color: var(--muted); }
+#date-btn { display: flex; align-items: center; gap: 8px; padding: 0 10px; }
+#sim-date { font-family: var(--mono); font-size: 12px; color: var(--text); letter-spacing: .02em; white-space: nowrap; }
+#date-btn .live { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); opacity: .4; }
+#date-btn.is-live .live { background: #6dffa8; opacity: 1; box-shadow: 0 0 6px #6dffa8; }
+#date-btn .caret { width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); }
+#date-pop {
+  position: absolute; right: -1px; top: calc(100% + 6px); z-index: 5; display: grid; gap: 10px; padding: 12px; width: 240px;
+  background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--line);
+}
+#date-pop[hidden] { display: none; }
+#date-pop label { display: grid; gap: 6px; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+#date-input {
+  font-family: var(--mono); font-size: 12px; color: var(--text); background: rgba(4, 9, 16, .8); border: 1px solid var(--line);
+  padding: 6px 8px; color-scheme: dark;
+}
+#date-input:focus { outline: none; border-color: var(--line-strong); }
+#btn-now { border: 1px solid var(--line) !important; padding: 6px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
 @media (max-width: 1400px) {
   .brand em { display: none; }
   .topbar { gap: 16px; }
-  #time-presets button, #btn-now { padding: 5px 7px; }
 }
-@media (max-width: 1180px) {
-  .topbar { flex-wrap: wrap; }
-  #crumbs { order: 3; flex-basis: 100%; }
-  .time { margin-left: auto; }
-}
-#time-presets { display: flex; border: 1px solid var(--line); }
-#time-presets button, #btn-now, .toggles button {
-  font-family: var(--mono); font-size: 11px; padding: 5px 9px; color: var(--muted); transition: color .15s, background .15s;
-}
-#time-presets button + button { border-left: 1px solid var(--line); }
-#time-presets button:hover, #btn-now:hover, .toggles button:hover { color: var(--text); background: rgba(127, 227, 255, .08); }
-#time-presets button.on { color: #02040a; background: var(--accent); }
-#btn-now { border: 1px solid var(--line); }
-#date-input {
-  font-family: var(--mono); font-size: 11px; color: var(--muted); background: transparent; border: 1px solid var(--line);
-  padding: 3px 6px; color-scheme: dark;
-}
-#date-input:focus { outline: none; border-color: var(--line-strong); color: var(--text); }
+.toggles button { color: var(--muted); transition: color .15s, background .15s; }
+.toggles button:hover { color: var(--text); background: rgba(127, 227, 255, .08); }
 
 /* Object list: a drawer that slides in from the left on demand. */
-.toolbar { position: absolute; left: 24px; top: 96px; display: flex; align-items: stretch; gap: 6px; }
+.toolbar { position: absolute; left: 24px; top: 64px; display: flex; align-items: stretch; gap: 6px; }
 #nav-toggle {
   display: flex; align-items: center; gap: 10px;
   padding: 7px 12px 7px 10px; border: 1px solid var(--line); background: rgba(4, 9, 16, .55);
@@ -150,7 +164,7 @@ body.ready #hud { opacity: 1; }
 #nav-toggle[aria-expanded="true"] .bars i:nth-child(2) { opacity: 0; }
 #nav-toggle[aria-expanded="true"] .bars i:nth-child(3) { transform: translateY(-4.5px) rotate(-45deg); }
 #nav {
-  position: absolute; left: 24px; top: 140px; width: 240px; max-height: calc(100vh - 200px); overflow-y: auto;
+  position: absolute; left: 24px; top: 106px; width: 240px; max-height: calc(100vh - 166px); overflow-y: auto;
   scrollbar-width: thin; scrollbar-color: var(--line) transparent; padding: 16px 12px 16px 14px;
   background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid var(--line);
   opacity: 0; transform: translateX(-24px); visibility: hidden;
@@ -190,8 +204,8 @@ body.ready #hud { opacity: 1; }
 
 /* ── Info panel ──────────────────────────────────────────────── */
 #panel {
-  position: absolute; right: clamp(12px, 1.6vw, 24px); top: 110px; width: clamp(290px, 26vw, 390px);
-  max-height: calc(100vh - 170px); overflow-y: auto;
+  position: absolute; right: clamp(12px, 1.6vw, 24px); top: 64px; width: clamp(290px, 26vw, 390px);
+  max-height: calc(100vh - 124px); overflow-y: auto;
   background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--line); padding: clamp(16px, 1.4vw, 22px) clamp(16px, 1.5vw, 24px) 18px;
   clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));

@@ -586,8 +586,12 @@ window.addEventListener('keydown', (e) => {
   } else if (e.key === 'i' || e.key === 'I' || e.key === 'ш' || e.key === 'Ш') {
     ui.toggleCollapsed();
   } else if (e.key === ' ') {
-    setSpeed(speedIndex === 0 ? 1 : 0);
+    document.querySelector<HTMLButtonElement>('#btn-play')!.click();
     e.preventDefault();
+  } else if (e.key === ',' || e.key === 'б' || e.key === 'Б') {
+    ui.stepSpeed(-1);
+  } else if (e.key === '.' || e.key === 'ю' || e.key === 'Ю') {
+    ui.stepSpeed(1);
   }
 });
 
@@ -750,6 +754,7 @@ function frame(now: number) {
   updateMarkers();
   refreshLive(dt);
   ui.setDate(dateFromDays(simDays));
+  ui.setRealtime(speedIndex === 1 && Math.abs(simDays - daysFromDate(Date.now())) < 2 / 1440);
 
   composer.render();
   labelRenderer.render(scene, camera);

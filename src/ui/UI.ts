@@ -184,14 +184,31 @@ export class UI {
     });
   }
 
+  private speedIndex = 1;
+  /** Last non-zero speed, restored by the play button. */
+  private runIndex = 1;
+
   private buildTime() {
-    const box = $('#time-presets');
-    box.innerHTML = TIME_PRESETS.map((p, i) => `<button data-i="${i}" title="${p.title}">${p.label}</button>`).join('');
-    box.addEventListener('click', (e) => {
-      const b = (e.target as HTMLElement).closest<HTMLElement>('[data-i]');
-      if (b) this.h.setSpeed(Number(b.dataset.i));
+    $('#btn-play').addEventListener('click', () => this.h.setSpeed(this.speedIndex === 0 ? this.runIndex : 0));
+    $('#speed-down').addEventListener('click', () => this.stepSpeed(-1));
+    $('#speed-up').addEventListener('click', () => this.stepSpeed(1));
+    const pop = $('#date-pop');
+    const btn = $('#date-btn');
+    const setPop = (open: boolean) => {
+      pop.hidden = !open;
+      btn.setAttribute('aria-expanded', String(open));
+    };
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setPop(pop.hidden !== false);
     });
-    $('#btn-now').addEventListener('click', () => this.h.resetNow());
+    document.addEventListener('pointerdown', (e) => {
+      if (!pop.hidden && !(e.target as HTMLElement).closest('#date-pop, #date-btn')) setPop(false);
+    });
+    $('#btn-now').addEventListener('click', () => {
+      this.h.resetNow();
+      setPop(false);
+    });
     this.dateInput.addEventListener('change', () => {
       // The input is in UTC (the whole UI shows UTC).
       const ms = Date.parse(this.dateInput.value + ':00Z');
@@ -199,8 +216,29 @@ export class UI {
     });
   }
 
+  /** Step through the non-zero speeds; from pause, resume at the previous speed. */
+  stepSpeed(dir: 1 | -1) {
+    const from = this.speedIndex === 0 ? this.runIndex : this.speedIndex;
+    const next = this.speedIndex === 0 ? from : Math.min(TIME_PRESETS.length - 1, Math.max(1, from + dir));
+    this.h.setSpeed(next);
+  }
+
   setSpeedIndex(i: number) {
-    document.querySelectorAll('#time-presets button').forEach((b, k) => b.classList.toggle('on', k === i));
+    this.speedIndex = i;
+    if (i > 0) this.runIndex = i;
+    const shown = TIME_PRESETS[i > 0 ? i : this.runIndex];
+    $('#speed-label').textContent = shown.label;
+    $('#speed-label').title = shown.title;
+    $('#btn-play').classList.toggle('paused', i === 0);
+    $('#btn-play').setAttribute('aria-label', i === 0 ? 'Продолжить' : 'Пауза');
+    $('.time').classList.toggle('paused', i === 0);
+    $('#speed-down').toggleAttribute('disabled', i === 1);
+    $('#speed-up').toggleAttribute('disabled', i === TIME_PRESETS.length - 1);
+  }
+
+  /** Green "live" dot when the simulation runs in real time at the present moment. */
+  setRealtime(live: boolean) {
+    $('#date-btn').classList.toggle('is-live', live);
   }
 
   setToggle(id: 'light' | 'orbits', on: boolean) {
@@ -208,12 +246,12 @@ export class UI {
   }
 
   setDate(d: Date) {
-    const s = d.toLocaleString('ru-RU', {
-      day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC',
-    });
+    const day = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).replace(' г.', '');
+    const time = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+    const s = `${day}, ${time} UTC`;
     if (s === this.lastDate) return;
     this.lastDate = s;
-    this.date.textContent = `${s} UTC`;
+    this.date.textContent = s;
     if (document.activeElement !== this.dateInput && Number.isFinite(d.getTime())) {
       this.dateInput.value = d.toISOString().slice(0, 16);
     }

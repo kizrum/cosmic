@@ -18,11 +18,18 @@
         <div class="brand"><span class="logo"></span>COSMIC<em>Навигационная карта</em></div>
         <nav id="crumbs"></nav>
         <div class="time">
-          <div id="sim-date">—</div>
-          <div class="time-row">
-            <div id="time-presets"></div>
-            <input id="date-input" type="datetime-local" step="60" title="Выбрать дату и время (UTC)" />
-            <button id="btn-now" title="Вернуться к текущей дате">Сейчас</button>
+          <button id="btn-play" title="Пауза / продолжить (Пробел)" aria-label="Пауза"><i></i></button>
+          <div class="speed" title="Скорость времени (клавиши , и .)">
+            <button id="speed-down" aria-label="Медленнее">‹</button>
+            <span id="speed-label">1×</span>
+            <button id="speed-up" aria-label="Быстрее">›</button>
+          </div>
+          <button id="date-btn" aria-haspopup="dialog" aria-expanded="false" title="Выбрать дату">
+            <span class="live" title="Реальное время"></span><span id="sim-date">—</span><span class="caret"></span>
+          </button>
+          <div id="date-pop" hidden>
+            <label>Дата и время, UTC<input id="date-input" type="datetime-local" step="60" /></label>
+            <button id="btn-now">Сейчас</button>
           </div>
         </div>
       </header>
