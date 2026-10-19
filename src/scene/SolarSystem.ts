@@ -12,8 +12,11 @@ import {
 } from './shaders';
 
 const SUN_RADIUS = 12;
-/** Earth–Moon distance in scene units (Earth radius = 1). */
-const MOON_DISTANCE = 4.2;
+/**
+ * Earth–Moon distance in scene units (Earth radius = 1), compressed with the same rule as
+ * every other moon: 60.3 Earth radii → ≈ 10.2.
+ */
+const MOON_DISTANCE = satelliteDistance(384_400 / 6371);
 const SUN_POS = new THREE.Vector3(0, 0, 0);
 
 /** Radii are compressed (power 0.55) so that small worlds stay visible next to giants. */

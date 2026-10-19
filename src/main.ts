@@ -248,6 +248,7 @@ function goSystem() {
   director.flyTo({
     anchor: null, position: OVERVIEW.clone(), target: new THREE.Vector3(), minDistance: 30, maxDistance: 3000,
     avoid: { center: () => new THREE.Vector3(), radius: system.get('sun').radius * 1.3 },
+    pullBack: true,
   });
 }
 
@@ -295,7 +296,12 @@ function focusBody(b: Body) {
   let dir: THREE.Vector3;
   if (b.def.id === 'sun') dir = fromCam.add(new THREE.Vector3(0, 0.35, 0)).normalize();
   else if (prev === b) dir = fromCam;
-  else dir = toSun.multiplyScalar(0.6).add(fromCam.multiplyScalar(0.5)).add(up).normalize();
+  else if (b.def.group === 'moon' && b.parent) {
+    // Moons are approached from the outside, with their planet in the background: the view
+    // tells where you are, and flying back to the planet is a straight push forward.
+    const outward = center.clone().sub(b.parent.getWorldPosition()).normalize();
+    dir = outward.multiplyScalar(0.8).add(toSun.multiplyScalar(0.35)).add(new THREE.Vector3(0, 0.3, 0)).normalize();
+  } else dir = toSun.multiplyScalar(0.6).add(fromCam.multiplyScalar(0.5)).add(up).normalize();
   const framing: Record<string, number> = { saturn: 6.5, sun: 4.2, haumea: 6, jupiter: 11, uranus: 10, neptune: 8 };
   const dist = R * (framing[b.def.id] ?? 3.8);
   director.flyTo({
