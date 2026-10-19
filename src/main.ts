@@ -529,6 +529,8 @@ renderer.domElement.addEventListener('pointermove', (e) => {
 
 window.addEventListener('keydown', (e) => {
   if ((e.target as HTMLElement).tagName === 'INPUT') return;
+  // Esc belongs to the credits dialog while it is open.
+  if (document.querySelector<HTMLDialogElement>('#credits')!.open) return;
   if (e.key === 'Escape' || e.key === 'Backspace') {
     if (mode === 'site' && focused) focusBody(focused);
     else if (mode === 'body' && focused?.def.group === 'moon' && focused.parent) focusBody(focused.parent);

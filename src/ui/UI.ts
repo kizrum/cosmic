@@ -1,5 +1,6 @@
 import { BODIES, bodyById, type BodyDef, type Site } from '../data/bodies';
 import { REGIONS, type RegionDef } from '../data/regions';
+import { CREDITS, NOTICES } from '../data/credits';
 import { formatLatLon } from '../astro';
 
 export const TIME_PRESETS: { label: string; title: string; days: number }[] = [
@@ -64,6 +65,7 @@ export class UI {
   constructor(private readonly h: UIHandlers) {
     this.buildNav();
     this.buildTime();
+    this.buildCredits();
     $('#btn-light').addEventListener('click', () => h.toggleLight());
     $('#btn-orbits').addEventListener('click', () => h.toggleOrbits());
     this.panel.addEventListener('click', (e) => {
@@ -112,6 +114,31 @@ export class UI {
     return `<ul class="sub" data-parent="${parentId}">${moons
       .map((m) => `<li><button data-body="${m.id}" class="child" style="--c:${m.color}"><span class="dot"></span><span class="n">${m.name}</span></button></li>`)
       .join('')}</ul>`;
+  }
+
+  private buildCredits() {
+    const dialog = $<HTMLDialogElement>('#credits');
+    const link = (url: string, text: string) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${esc(text)}</a>`;
+    $('#credits-body').innerHTML =
+      `<ul class="notices">${NOTICES.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` +
+      CREDITS.map(
+        (g) => `<h3>${esc(g.title)}</h3><ul class="credits-list">${g.entries
+          .map(
+            (e) => `<li>
+              <div class="cw">${esc(e.what)}</div>
+              <div class="ca">${e.source ? link(e.source, e.author) : esc(e.author)}</div>
+              <div class="cl">${e.licenceUrl ? link(e.licenceUrl, e.licence) : esc(e.licence)}</div>
+              ${e.changes ? `<div class="cc">Изменения: ${esc(e.changes)}</div>` : ''}
+            </li>`,
+          )
+          .join('')}</ul>`,
+      ).join('');
+    $('#btn-credits').addEventListener('click', () => dialog.showModal());
+    dialog.querySelector('.credits-close')!.addEventListener('click', () => dialog.close());
+    // Click on the backdrop closes the dialog.
+    dialog.addEventListener('click', (e) => {
+      if (e.target === dialog) dialog.close();
+    });
   }
 
   private buildTime() {

@@ -29,6 +29,9 @@ npm run build    # статическая сборка в dist/
 
 ## Источники карт
 
+Полный список авторов, лицензий и внесённых изменений (как требуют CC BY и CC BY-SA)
+показывается в приложении по кнопке «Источники и лицензии»; данные — в `src/data/credits.ts`.
+
 - Планеты, Солнце, звёздное небо: [Solar System Scope](https://www.solarsystemscope.com/textures/) (CC BY 4.0), на основе данных NASA.
 - Спутники, Церера, Плутон, Харон: NASA / JPL / USGS (общественное достояние), через Wikimedia Commons.
 - Ганимед: Björn Jónsson. Фобос и Деймос: Askaniy (CC BY-SA 3.0).

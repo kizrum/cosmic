@@ -38,8 +38,16 @@
       <section id="panel"></section>
 
       <footer id="hint"></footer>
-      <div class="note">Размеры тел и расстояния сжаты для наглядности · положения на выбранную дату: JPL (элементы планет, Horizons), Луна — теория Миуса · оси и вращение: IAU WGCCRE · карты: NASA/JPL/USGS, Solar System Scope (CC BY 4.0), Björn Jónsson, Askaniy (CC BY-SA)</div>
+      <button id="btn-credits" class="note">Масштаб условный · Источники и лицензии</button>
     </div>
+
+    <dialog id="credits">
+      <div class="credits-head">
+        <h2>Источники и лицензии</h2>
+        <button class="credits-close" aria-label="Закрыть">✕</button>
+      </div>
+      <div id="credits-body"></div>
+    </dialog>
 
     <div id="loader">
       <div class="loader-inner">
