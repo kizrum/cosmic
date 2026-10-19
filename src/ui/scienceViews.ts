@@ -1,13 +1,14 @@
 import type { BodyDef } from '../data/bodies';
 import { GAS_COLOR, MATERIAL_COLOR, type Science } from '../data/science';
+import { fmtNum, t } from '../i18n';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 const num = (n: number, digits = 2) =>
-  n.toLocaleString('ru-RU', { maximumFractionDigits: n < 0.1 ? 4 : n < 10 ? digits : 0 });
+  fmtNum(n, { maximumFractionDigits: n < 0.1 ? 4 : n < 10 ? digits : 0 });
 
 /** Percentages keep their meaningful decimals: 95,1 · 2,59 · 0,042. */
-const pct = (p: number) => p.toLocaleString('ru-RU', { maximumFractionDigits: p >= 10 ? 1 : p >= 1 ? 2 : 4 });
+const pct = (p: number) => fmtNum(p, { maximumFractionDigits: p >= 10 ? 1 : p >= 1 ? 2 : 4 });
 
 const EARTH_R = 6371;
 const EARTH_G = 9.81;
@@ -47,32 +48,32 @@ export function statTiles(b: BodyDef, sci: Science) {
   const tiles: string[] = [];
   const g = sci.gravity / EARTH_G;
   tiles.push(`<div class="stat">
-    <span class="sl">Гравитация</span><b>${num(sci.gravity)} м/с²</b>
+    <span class="sl">${t('gravity')}</span><b>${num(sci.gravity)} ${t('ms2')}</b>
     ${meter(Math.sqrt(sci.gravity / 25), '#7fe3ff', Math.sqrt(EARTH_G / 25))}
-    <em>${g >= 0.01 ? `${num(g)} g` : `${num(g * 1000, 1)} тыс. g`} · метка — Земля</em></div>`);
+    <em>${g >= 0.01 ? `${num(g)} g` : `${num(g * 1000, 1)} ${t('thousandthG')}`} · ${t('gEarthMark')}</em></div>`);
 
   const [tMin, tMax] = Array.isArray(sci.temp) ? sci.temp : [sci.temp, sci.temp];
   const tLabel = tMin === tMax ? `${tMin > 0 ? '+' : ''}${num(tMin, 0)} °C` : `${num(tMin, 0)} … ${tMax > 0 ? '+' : ''}${num(tMax, 0)} °C`;
   const left = tempPos(tMin), right = tempPos(tMax);
   tiles.push(`<div class="stat">
-    <span class="sl">Температура</span><b style="color:${tempColor((tMin + tMax) / 2)}">${tLabel}</b>
+    <span class="sl">${t('temperature')}</span><b style="color:${tempColor((tMin + tMax) / 2)}">${tLabel}</b>
     <i class="meter temp"><u style="left:${left}%;width:${Math.max(2, right - left)}%"></u><s style="left:${tempPos(15)}%"></s></i>
-    <em>${esc(sci.tempNote ?? 'шкала от абсолютного нуля до +500 °C · метка — Земля')}</em></div>`);
+    <em>${esc(sci.tempNote ?? t('tempScale'))}</em></div>`);
 
-  const water = sci.density < 1 ? 'легче воды' : `в ${num(sci.density, 1)} раза плотнее воды`;
+  const water = sci.density < 1 ? t('lighterWater') : t('denserWater', num(sci.density, 1));
   tiles.push(`<div class="stat">
-    <span class="sl">Плотность</span><b>${num(sci.density)} г/см³</b>
+    <span class="sl">${t('density')}</span><b>${num(sci.density)} ${t('gcm3')}</b>
     ${meter(sci.density / 5.6, '#ffc65c', 1 / 5.6)}
-    <em>${water} · метка — вода</em></div>`);
+    <em>${water} · ${t('waterMark')}</em></div>`);
 
-  const esc2 = sci.escape < 1 ? `${num(sci.escape * 1000, 0)} м/с` : `${num(sci.escape, 2)} км/с`;
+  const esc2 = sci.escape < 1 ? `${num(sci.escape * 1000, 0)} ${t('ms')}` : `${num(sci.escape, 2)} ${t('kms')}`;
   tiles.push(`<div class="stat">
-    <span class="sl">2-я космическая</span><b>${esc2}</b>
+    <span class="sl">${t('escape')}</span><b>${esc2}</b>
     ${meter(Math.sqrt(sci.escape / 62), '#c79bff', Math.sqrt(11.19 / 62))}
-    <em>скорость отрыва · метка — Земля</em></div>`);
+    <em>${t('escapeNote')}</em></div>`);
 
-  if (sci.day) tiles.push(`<div class="stat"><span class="sl">Сутки</span><b>${esc(sci.day)}</b></div>`);
-  if (sci.year) tiles.push(`<div class="stat"><span class="sl">${b.group === 'moon' ? 'Оборот' : 'Год'}</span><b>${esc(sci.year)}</b></div>`);
+  if (sci.day) tiles.push(`<div class="stat"><span class="sl">${t('dayLen')}</span><b>${esc(sci.day)}</b></div>`);
+  if (sci.year) tiles.push(`<div class="stat"><span class="sl">${b.group === 'moon' ? t('orbitLen') : t('yearLen')}</span><b>${esc(sci.year)}</b></div>`);
   // An odd tile stretches across the row so the grid has no empty cell.
   if (tiles.length % 2) tiles[tiles.length - 1] = tiles[tiles.length - 1].replace('class="stat"', 'class="stat wide"');
   return `<div class="stats">${tiles.join('')}</div>`;
@@ -97,7 +98,8 @@ export function structureView(b: BodyDef, sci: Science) {
     .map((l, i) => {
       const km = (l.to - prev) * b.radiusKm;
       prev = l.to;
-      const thick = km >= 1 ? `${i === 0 ? 'радиус' : 'толщина'} ≈ ${(km >= 100 ? Math.round(km / 10) * 10 : Math.round(km)).toLocaleString('ru-RU')} км` : '';
+      const rounded = fmtNum(km >= 100 ? Math.round(km / 10) * 10 : Math.round(km));
+      const thick = km >= 1 ? (i === 0 ? t('radiusAbout', rounded) : t('thickAbout', rounded)) : '';
       return `<li><span class="sw" style="background:${MATERIAL_COLOR[l.m]}"></span>
         <div><b>${esc(l.name)}</b>${thick ? `<em>${thick}</em>` : ''}${l.detail ? `<small>${esc(l.detail)}</small>` : ''}</div></li>`;
     })
@@ -111,7 +113,7 @@ export function structureView(b: BodyDef, sci: Science) {
       <circle cx="${30}" cy="32" r="${Math.max(0.8, (28 * 1) / big)}" fill="#5aa9ff" />
       <circle cx="${88}" cy="32" r="${Math.max(0.8, (28 * ratio) / big)}" fill="${b.color}" />
     </svg>
-    <div><b>${ratio >= 0.1 ? num(ratio) : num(ratio, 3)} × Земли</b><small>Земля и ${esc(b.name)} в одном масштабе</small></div>
+    <div><b>${t('timesEarth', ratio >= 0.1 ? num(ratio) : num(ratio, 3))}</b><small>${t('sameScale', esc(b.name))}</small></div>
   </div>`;
 
   let gases = '';
@@ -124,17 +126,17 @@ export function structureView(b: BodyDef, sci: Science) {
           .join('')}</div>`
       : '';
     const rows = sci.gases
-      .map((g) => `<li><span class="sw" style="background:${GAS_COLOR[g.gas] ?? '#8aa0b4'}"></span>${esc(g.gas)}<em>${g.pct !== undefined ? `${pct(g.pct)} %` : 'следы'}</em></li>`)
+      .map((g) => `<li><span class="sw" style="background:${GAS_COLOR[g.gas] ?? '#8aa0b4'}"></span>${esc(g.gas)}<em>${g.pct !== undefined ? `${pct(g.pct)} %` : t('traces')}</em></li>`)
       .join('');
-    gases = `<h3>${esc(sci.gasesTitle ?? 'Атмосфера')}</h3>${bar}<ul class="gases">${rows}</ul>
+    gases = `<h3>${esc(sci.gasesTitle ?? t('atmosphere'))}</h3>${bar}<ul class="gases">${rows}</ul>
       ${sci.gasesNote ? `<p class="tip">${esc(sci.gasesNote)}</p>` : ''}`;
   } else if (b.group !== 'star') {
-    gases = `<h3>Атмосфера</h3><p class="tip">Практически отсутствует.</p>`;
+    gases = `<h3>${t('atmosphere')}</h3><p class="tip">${t('noAtmosphere')}</p>`;
   }
 
   return `${cmp}
-    <h3>Внутреннее строение${sci.layersModel ? ' <span class="model">модель</span>' : ''}</h3>
+    <h3>${t('interior')}${sci.layersModel ? ` <span class="model">${t('model')}</span>` : ''}</h3>
     <div class="structure">${section}<ul class="layers">${legend}</ul></div>
-    <p class="tip">Слои от поверхности к центру; сумма толщин равна радиусу — ${Math.round(b.radiusKm).toLocaleString('ru-RU')} км.</p>
+    <p class="tip">${t('layersTip', fmtNum(Math.round(b.radiusKm)))}</p>
     ${gases}`;
 }

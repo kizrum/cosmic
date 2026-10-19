@@ -1,9 +1,10 @@
-import { BODIES, bodyById, type BodyDef, type Site } from '../data/bodies';
-import { REGIONS, type RegionDef } from '../data/regions';
-import { CREDITS, NOTICES } from '../data/credits';
+import { BODIES, type BodyDef, type Site } from '../data/bodies';
+import type { RegionDef } from '../data/regions';
 import { formatLatLon } from '../astro';
-import { scienceOf } from '../data/science';
-import { categoryOf, type SiteCategory } from '../data/siteShapes';
+import { categoryOf } from '../data/siteShapes';
+import { bodyByIdL, bodyL, creditsL, noticesL, regionL, regionsL, scienceL } from '../data/localize';
+import { EN_TIME } from '../data/en/misc';
+import { fmtNum, lang, locale, setLang, t, type Lang } from '../i18n';
 import { featureChips, statTiles, structureView } from './scienceViews';
 
 export const TIME_PRESETS: { label: string; title: string; days: number }[] = [
@@ -15,6 +16,8 @@ export const TIME_PRESETS: { label: string; title: string; days: number }[] = [
   { label: '1 мес/с', title: '1 месяц за секунду (вращение планет упрощено)', days: 30.44 },
   { label: '1 год/с', title: '1 год за секунду (вращение планет упрощено)', days: 365.25 },
 ];
+
+const presetText = (i: number) => (lang === 'ru' ? TIME_PRESETS[i] : { label: EN_TIME[i][0], title: EN_TIME[i][1] });
 
 export interface LiveStat {
   label: string;
@@ -42,7 +45,11 @@ const factsTable = (facts: [string, string][] | LiveStat[]) =>
         .join('')}</dl>`
     : '';
 
-const moonsOf = (id: string) => BODIES.filter((b) => b.parent === id);
+const moonsOf = (id: string) => BODIES.filter((b) => b.parent === id).map(bodyL);
+
+/** Title with the Latin name underneath — skipped when it would just repeat the title. */
+const title = (name: string, latin: string) =>
+  `<h2>${esc(name)}${latin.toLowerCase() !== name.toLowerCase() ? `<small>${esc(latin)}</small>` : ''}</h2>`;
 
 interface PanelTab {
   id: string;
@@ -74,6 +81,8 @@ export class UI {
   private readonly live = () => this.panel.querySelector('.live') as HTMLElement | null;
   private lastDate = '';
   private lastTab = 'overview';
+  private activeId: string | null = null;
+  private activeRegion: string | null = null;
   /** Small windows start with the details folded away; the viewer's choice is remembered. */
   private collapsed = (() => {
     try {
@@ -91,16 +100,19 @@ export class UI {
     this.buildCredits();
     $('#btn-light').addEventListener('click', () => h.toggleLight());
     $('#btn-orbits').addEventListener('click', () => h.toggleOrbits());
+    document.querySelectorAll<HTMLElement>('[data-lang]').forEach((b) =>
+      b.addEventListener('click', () => setLang(b.dataset.lang as Lang)),
+    );
     this.panel.addEventListener('click', (e) => {
-      const t = e.target as HTMLElement;
-      const tab = t.closest<HTMLElement>('[data-tab]');
+      const tg = e.target as HTMLElement;
+      const tab = tg.closest<HTMLElement>('[data-tab]');
       if (tab) return this.selectTab(tab.dataset.tab!);
-      if (t.closest('[data-collapse]')) return this.setCollapsed(!this.collapsed);
-      const site = t.closest<HTMLElement>('[data-site]');
+      if (tg.closest('[data-collapse]')) return this.setCollapsed(!this.collapsed);
+      const site = tg.closest<HTMLElement>('[data-site]');
       if (site) return h.selectSite(site.dataset.body!, site.dataset.site!);
-      const body = t.closest<HTMLElement>('[data-body]');
+      const body = tg.closest<HTMLElement>('[data-body]');
       if (body) return h.selectBody(body.dataset.body!);
-      const back = t.closest<HTMLElement>('[data-back]');
+      const back = tg.closest<HTMLElement>('[data-back]');
       if (back) (back.dataset.back === 'system' ? h.goSystem : h.goBody)();
     });
     this.panel.addEventListener('pointerover', (e) => {
@@ -118,28 +130,46 @@ export class UI {
     });
   }
 
+  /** Re-render everything that holds language-dependent text (the panel is re-opened by the caller). */
+  relang() {
+    this.renderNav();
+    this.renderCredits();
+    this.setSpeedIndex(this.speedIndex);
+    this.lastDate = '';
+  }
+
+  // ── Object list ─────────────────────────────────────────────────────────────
   private buildNav() {
-    const item = (b: BodyDef, cls = '') =>
-      `<li><button data-body="${b.id}" class="${cls}" style="--c:${b.color}">
-        <span class="dot"></span><span class="n">${b.name}</span><span class="k">${b.latin}</span></button>${this.subList(b.id)}</li>`;
-    const planets = BODIES.filter((b) => b.group === 'star' || b.group === 'planet');
-    const dwarfs = BODIES.filter((b) => b.group === 'dwarf');
-    $('#nav-groups').innerHTML = `
-      <h4>Солнце и планеты</h4><ul class="nav-list">${planets.map((b) => item(b)).join('')}</ul>
-      <h4>Карликовые планеты</h4><ul class="nav-list">${dwarfs.map((b) => item(b)).join('')}</ul>
-      <h4>Пояса</h4><ul class="nav-list">${REGIONS.map(
-        (r) => `<li><button data-region="${r.id}" style="--c:${r.color}"><span class="dot ring"></span><span class="n">${r.name}</span><span class="k">${r.latin}</span></button></li>`,
-      ).join('')}</ul>`;
+    this.renderNav();
     $('#nav-groups').addEventListener('click', (e) => {
-      const t = e.target as HTMLElement;
-      const btn = t.closest<HTMLElement>('[data-body]');
-      const reg = t.closest<HTMLElement>('[data-region]');
+      const tg = e.target as HTMLElement;
+      const btn = tg.closest<HTMLElement>('[data-body]');
+      const reg = tg.closest<HTMLElement>('[data-region]');
       if (btn) this.h.selectBody(btn.dataset.body!);
       else if (reg) this.h.selectRegion(reg.dataset.region!);
       else return;
       this.setNavOpen(false);
     });
     $('#nav-toggle').addEventListener('click', () => this.setNavOpen(!this.navOpen));
+  }
+
+  private renderNav() {
+    const latin = (name: string, l: string) => (l.toLowerCase() !== name.toLowerCase() ? `<span class="k">${l}</span>` : '<span class="k"></span>');
+    const item = (raw: BodyDef) => {
+      const b = bodyL(raw);
+      return `<li><button data-body="${b.id}" style="--c:${b.color}">
+        <span class="dot"></span><span class="n">${b.name}</span>${latin(b.name, b.latin)}</button>${this.subList(b.id)}</li>`;
+    };
+    const planets = BODIES.filter((b) => b.group === 'star' || b.group === 'planet');
+    const dwarfs = BODIES.filter((b) => b.group === 'dwarf');
+    $('#nav-groups').innerHTML = `
+      <h4>${t('navPlanets')}</h4><ul class="nav-list">${planets.map(item).join('')}</ul>
+      <h4>${t('navDwarfs')}</h4><ul class="nav-list">${dwarfs.map(item).join('')}</ul>
+      <h4>${t('navBelts')}</h4><ul class="nav-list">${regionsL()
+        .map((r) => `<li><button data-region="${r.id}" style="--c:${r.color}"><span class="dot ring"></span><span class="n">${r.name}</span>${latin(r.name, r.latin)}</button></li>`)
+        .join('')}</ul>`;
+    if (this.activeRegion) this.setActiveRegion(this.activeRegion);
+    else this.setActiveBody(this.activeId);
   }
 
   get navOpen() {
@@ -159,23 +189,10 @@ export class UI {
       .join('')}</ul>`;
   }
 
+  // ── Credits ─────────────────────────────────────────────────────────────────
   private buildCredits() {
     const dialog = $<HTMLDialogElement>('#credits');
-    const link = (url: string, text: string) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${esc(text)}</a>`;
-    $('#credits-body').innerHTML =
-      `<ul class="notices">${NOTICES.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` +
-      CREDITS.map(
-        (g) => `<h3>${esc(g.title)}</h3><ul class="credits-list">${g.entries
-          .map(
-            (e) => `<li>
-              <div class="cw">${esc(e.what)}</div>
-              <div class="ca">${e.source ? link(e.source, e.author) : esc(e.author)}</div>
-              <div class="cl">${e.licenceUrl ? link(e.licenceUrl, e.licence) : esc(e.licence)}</div>
-              ${e.changes ? `<div class="cc">Изменения: ${esc(e.changes)}</div>` : ''}
-            </li>`,
-          )
-          .join('')}</ul>`,
-      ).join('');
+    this.renderCredits();
     $('#btn-credits').addEventListener('click', () => dialog.showModal());
     dialog.querySelector('.credits-close')!.addEventListener('click', () => dialog.close());
     // Click on the backdrop closes the dialog.
@@ -184,6 +201,27 @@ export class UI {
     });
   }
 
+  private renderCredits() {
+    const link = (url: string, text: string) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${esc(text)}</a>`;
+    $('#credits-body').innerHTML =
+      `<ul class="notices">${noticesL().map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` +
+      creditsL()
+        .map(
+          (g) => `<h3>${esc(g.title)}</h3><ul class="credits-list">${g.entries
+            .map(
+              (e) => `<li>
+              <div class="cw">${esc(e.what)}</div>
+              <div class="ca">${e.source ? link(e.source, e.author) : esc(e.author)}</div>
+              <div class="cl">${e.licenceUrl ? link(e.licenceUrl, e.licence) : esc(e.licence)}</div>
+              ${e.changes ? `<div class="cc">${t('changes')}: ${esc(e.changes)}</div>` : ''}
+            </li>`,
+            )
+            .join('')}</ul>`,
+        )
+        .join('');
+  }
+
+  // ── Time control ────────────────────────────────────────────────────────────
   private speedIndex = 1;
   /** Last non-zero speed, restored by the play button. */
   private runIndex = 1;
@@ -226,11 +264,11 @@ export class UI {
   setSpeedIndex(i: number) {
     this.speedIndex = i;
     if (i > 0) this.runIndex = i;
-    const shown = TIME_PRESETS[i > 0 ? i : this.runIndex];
+    const shown = presetText(i > 0 ? i : this.runIndex);
     $('#speed-label').textContent = shown.label;
     $('#speed-label').title = shown.title;
     $('#btn-play').classList.toggle('paused', i === 0);
-    $('#btn-play').setAttribute('aria-label', i === 0 ? 'Продолжить' : 'Пауза');
+    $('#btn-play').setAttribute('aria-label', i === 0 ? t('play') : t('pause'));
     $('.time').classList.toggle('paused', i === 0);
     $('#speed-down').toggleAttribute('disabled', i === 1);
     $('#speed-up').toggleAttribute('disabled', i === TIME_PRESETS.length - 1);
@@ -246,8 +284,8 @@ export class UI {
   }
 
   setDate(d: Date) {
-    const day = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).replace(' г.', '');
-    const time = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+    const day = d.toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).replace(' г.', '');
+    const time = d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
     const s = `${day}, ${time} UTC`;
     if (s === this.lastDate) return;
     this.lastDate = s;
@@ -257,7 +295,10 @@ export class UI {
     }
   }
 
+  // ── Navigation state ────────────────────────────────────────────────────────
   setActiveBody(id: string | null) {
+    this.activeId = id;
+    this.activeRegion = null;
     const def = id ? BODIES.find((b) => b.id === id) : undefined;
     const open = def?.parent ?? id;
     document.querySelectorAll<HTMLElement>('#nav-groups [data-body]').forEach((b) => b.classList.toggle('active', b.dataset.body === id));
@@ -267,44 +308,51 @@ export class UI {
 
   private setActiveRegion(id: string) {
     this.setActiveBody(null);
+    this.activeRegion = id;
     document.querySelectorAll<HTMLElement>('#nav-groups [data-region]').forEach((b) => b.classList.toggle('active', b.dataset.region === id));
   }
 
   private setCrumbs(body?: BodyDef, leaf?: string) {
-    const parts = [`<button data-crumb="system">Солнечная система</button>`];
-    if (body?.parent) parts.push(`<button data-crumb="${body.parent}">${bodyById(body.parent).name}</button>`);
+    const parts = [`<button data-crumb="system">${t('system')}</button>`];
+    if (body?.parent) parts.push(`<button data-crumb="${body.parent}">${bodyByIdL(body.parent).name}</button>`);
     if (body) parts.push(`<button data-crumb="body" ${leaf ? '' : 'class="cur"'}>${body.name}</button>`);
     if (leaf) parts.push(`<span class="cur">${esc(leaf)}</span>`);
     this.crumbs.innerHTML = parts.join('<span class="sep">›</span>');
   }
 
+  // ── Panel ───────────────────────────────────────────────────────────────────
   /**
    * Panel layout: an always-visible header (title + live data) and tabbed details that can
    * be collapsed. The collapsed state is remembered per viewer.
    */
-  private open(spec: { header: string; status?: string; tabs: PanelTab[]; back?: string }) {
-    const tabs = spec.tabs.filter((t) => t.html.trim());
-    const active = tabs.find((t) => t.id === this.lastTab) ?? tabs[0];
+  private open(spec: { header: string; status?: string; tabs: PanelTab[]; back?: string }, animate = true) {
+    const tabs = spec.tabs.filter((tb) => tb.html.trim());
+    const active = tabs.find((tb) => tb.id === this.lastTab) ?? tabs[0];
     const bar = tabs.length > 1
-      ? `<nav class="tabs">${tabs.map((t) => `<button data-tab="${t.id}" class="${t === active ? 'on' : ''}">${t.label}${t.count ? `<sup>${t.count}</sup>` : ''}</button>`).join('')}</nav>`
+      ? `<nav class="tabs">${tabs.map((tb) => `<button data-tab="${tb.id}" class="${tb === active ? 'on' : ''}">${tb.label}${tb.count ? `<sup>${tb.count}</sup>` : ''}</button>`).join('')}</nav>`
       : '';
+    const scroll = this.panel.scrollTop;
     this.panel.innerHTML = `
       <div class="ph">
         ${spec.header}
-        <button class="collapse" data-collapse title="Свернуть / развернуть (I)" aria-label="Свернуть"><i></i></button>
+        <button class="collapse" data-collapse title="${t('collapse')}" aria-label="${t('collapse')}"><i></i></button>
       </div>
       ${spec.status ?? ''}
       <div class="live"></div>
       ${bar}
       <div class="tab-body">
-        ${tabs.map((t) => `<section data-pane="${t.id}" ${t === active ? '' : 'hidden'}>${t.html}</section>`).join('')}
+        ${tabs.map((tb) => `<section data-pane="${tb.id}" ${tb === active ? '' : 'hidden'}>${tb.html}</section>`).join('')}
         ${spec.back ?? ''}
       </div>`;
     this.panel.classList.toggle('collapsed', this.collapsed);
-    this.panel.classList.remove('show');
-    void this.panel.offsetWidth; // restart the reveal animation
-    this.panel.classList.add('show');
-    this.panel.scrollTop = 0;
+    if (animate) {
+      this.panel.classList.remove('show');
+      void this.panel.offsetWidth; // restart the reveal animation
+      this.panel.classList.add('show');
+      this.panel.scrollTop = 0;
+    } else {
+      this.panel.scrollTop = scroll;
+    }
   }
 
   private selectTab(id: string) {
@@ -340,38 +388,41 @@ export class UI {
     this.panel.classList.remove('show');
   }
 
-  showRegion(r: RegionDef) {
-    this.crumbs.innerHTML = `<button data-crumb="system">Солнечная система</button><span class="sep">›</span><span class="cur">${r.name}</span>`;
+  showRegion(raw: RegionDef, animate = true) {
+    const r = regionL(raw);
+    this.crumbs.innerHTML = `<button data-crumb="system">${t('system')}</button><span class="sep">›</span><span class="cur">${r.name}</span>`;
     this.setActiveRegion(r.id);
     this.open({
-      header: `<div class="kind" style="--c:${r.color}">${esc(r.kind)}</div><h2>${r.name}<small>${r.latin}</small></h2>`,
+      header: `<div class="kind" style="--c:${r.color}">${esc(r.kind)}</div>${title(r.name, r.latin)}`,
       tabs: [
-        { id: 'overview', label: 'Обзор', html: `<p class="desc">${esc(r.description)}</p>` },
-        { id: 'facts', label: 'Факты', html: factsTable(r.facts) },
+        { id: 'overview', label: t('tabOverview'), html: `<p class="desc">${esc(r.description)}</p>` },
+        { id: 'facts', label: t('tabFacts'), html: factsTable(r.facts) },
       ],
-      back: '<button class="back" data-back="system">← К системе</button>',
-    });
+      back: `<button class="back" data-back="system">${t('backSystem')}</button>`,
+    }, animate);
   }
 
-  showBody(b: BodyDef) {
+  showBody(raw: BodyDef, animate = true) {
+    const b = bodyL(raw);
     this.setCrumbs(b);
     this.setActiveBody(b.id);
-    const sci = scienceOf(b.id);
+    const sci = scienceL(b.id);
     const moons = moonsOf(b.id);
     const moonList = moons.length
       ? `<ul class="moon-grid">${moons
           .map((m) => `<li><button data-body="${m.id}" style="--c:${m.color}">
-            <span class="dot"></span><b>${m.name}</b><small>${esc(m.kind)} · R ${Math.round(m.radiusKm).toLocaleString('ru-RU')} км</small></button></li>`)
+            <span class="dot"></span><b>${m.name}</b><small>${esc(m.kind)} · R ${fmtNum(Math.round(m.radiusKm))} ${t('km')}</small></button></li>`)
           .join('')}</ul>`
       : '';
     const parent = b.parent
-      ? `<button class="near" data-body="${b.parent}"><span>Обращается вокруг</span><b>${bodyById(b.parent).name}</b></button>`
+      ? `<button class="near" data-body="${b.parent}"><span>${t('orbits_around')}</span><b>${bodyByIdL(b.parent).name}</b></button>`
       : '';
-    const cats = new Map<string, SiteCategory>();
+    const cats = new Map<string, { id: string; color: string }>();
     const siteList = b.sites.length
       ? `<ul class="sites">${b.sites
           .map((s, i) => {
-            const c = categoryOf(s, b.id);
+            // Categories are derived from the Russian source text.
+            const c = categoryOf(raw.sites[i], b.id);
             cats.set(c.id, c);
             return `<li><button data-body="${b.id}" data-site="${s.id}" style="--cc:${c.color}">
               <span class="idx">${String(i + 1).padStart(2, '0')}</span>
@@ -379,52 +430,57 @@ export class UI {
           })
           .join('')}</ul>`
       : '';
+    const catKey = { volcanic: 'catVolcanic', impact: 'catImpact', water: 'catWater', atmosphere: 'catAtmosphere', mission: 'catMission', terrain: 'catTerrain' } as const;
     const legend = cats.size
-      ? `<ul class="legend">${[...cats.values()].map((c) => `<li style="--cc:${c.color}">${c.label}</li>`).join('')}</ul>`
+      ? `<ul class="legend">${[...cats.values()].map((c) => `<li style="--cc:${c.color}">${t(catKey[c.id as keyof typeof catKey])}</li>`).join('')}</ul>`
       : '';
     const sites = b.group === 'star'
-      ? `<p class="tip">Поверхность Солнца — плазма, отдельных районов для посадки нет. Выберите планету.</p>`
-      : `${legend}${siteList}<p class="tip">${b.sites.length ? 'Районы обведены на поверхности: наведите курсор, чтобы подсветить, и нажмите, чтобы изучить. ' : ''}Нажмите на любую другую точку, чтобы просканировать её.</p>`;
+      ? `<p class="tip">${t('sunNoSites')}</p>`
+      : `${legend}${siteList}<p class="tip">${b.sites.length ? t('sitesTip') : ''}${t('scanTip')}</p>`;
     this.open({
-      header: `<div class="kind" style="--c:${b.color}">${esc(b.kind)}</div><h2>${b.name}<small>${b.latin}</small></h2>`,
+      header: `<div class="kind" style="--c:${b.color}">${esc(b.kind)}</div>${title(b.name, b.latin)}`,
       tabs: [
         {
-          id: 'overview', label: 'Обзор',
+          id: 'overview', label: t('tabOverview'),
           html: `${sci ? featureChips(sci) : ''}<p class="desc">${esc(b.description)}</p>${b.note ? `<p class="note-data">${esc(b.note)}</p>` : ''}${sci ? statTiles(b, sci) : ''}${parent}`,
         },
-        { id: 'structure', label: 'Строение', html: sci ? structureView(b, sci) : '' },
-        { id: 'facts', label: 'Факты', html: factsTable(b.facts) },
-        { id: 'sites', label: 'Районы', count: b.sites.length, html: sites },
-        { id: 'moons', label: 'Спутники', count: moons.length, html: moonList },
+        { id: 'structure', label: t('tabStructure'), html: sci ? structureView(b, sci) : '' },
+        { id: 'facts', label: t('tabFacts'), html: factsTable(b.facts) },
+        { id: 'sites', label: t('tabSites'), count: b.sites.length, html: sites },
+        { id: 'moons', label: t('tabMoons'), count: moons.length, html: moonList },
       ],
-      back: '<button class="back" data-back="system">← К системе</button>',
-    });
+      back: `<button class="back" data-back="system">${t('backSystem')}</button>`,
+    }, animate);
   }
 
-  showSite(b: BodyDef, s: Site) {
+  showSite(raw: BodyDef, rawSite: Site, animate = true) {
+    const b = bodyL(raw);
+    const s = b.sites.find((x) => x.id === rawSite.id) ?? rawSite;
     this.setCrumbs(b, s.name);
-    const coord = s.elevation ? `${(b.radiusKm * s.elevation).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} км от центра, в плоскости колец` : formatLatLon(s.lat, s.lon);
+    const coord = s.elevation ? `${fmtNum(b.radiusKm * s.elevation, { maximumFractionDigits: 0 })} ${t('ringPlane')}` : formatLatLon(s.lat, s.lon);
     this.open({
       header: `<div class="kind" style="--c:${b.color}">${esc(s.kind)}</div><h2>${esc(s.name)}</h2><div class="coord">${b.name} · ${coord}</div>`,
-      status: '<div class="scan"><span></span>Сканирование района…</div>',
-      tabs: [{ id: 'overview', label: 'Обзор', html: `<p class="desc">${esc(s.description)}</p>${factsTable(s.facts ?? [])}` }],
-      back: `<button class="back" data-back="body">← К ${b.group === 'moon' ? 'спутнику' : 'планете'}</button>`,
-    });
+      status: animate ? `<div class="scan"><span></span>${t('scanSite')}</div>` : '',
+      tabs: [{ id: 'overview', label: t('tabOverview'), html: `<p class="desc">${esc(s.description)}</p>${factsTable(s.facts ?? [])}` }],
+      back: `<button class="back" data-back="body">${b.group === 'moon' ? t('backMoon') : t('backPlanet')}</button>`,
+    }, animate);
   }
 
-  showPoint(b: BodyDef, p: PointInfo) {
-    this.setCrumbs(b, 'Произвольная точка');
+  showPoint(raw: BodyDef, p: PointInfo, animate = true) {
+    const b = bodyL(raw);
+    this.setCrumbs(b, t('randomPoint'));
+    const nearName = p.nearest ? b.sites.find((x) => x.id === p.nearest!.site.id)?.name ?? p.nearest.site.name : '';
     const near = p.nearest
       ? `<button class="near" data-body="${b.id}" data-site="${p.nearest.site.id}">
-          <span>Ближайший изученный район</span><b>${esc(p.nearest.site.name)}</b>
-          <em>${Math.round(p.nearest.km).toLocaleString('ru-RU')} км по поверхности</em></button>`
+          <span>${t('nearestSite')}</span><b>${esc(nearName)}</b>
+          <em>${fmtNum(Math.round(p.nearest.km))} ${t('alongSurface')}</em></button>`
       : '';
     this.open({
-      header: `<div class="kind" style="--c:${b.color}">Неисследованный сектор</div><h2>${formatLatLon(p.lat, p.lon)}</h2><div class="coord">${b.name}</div>`,
-      status: '<div class="scan"><span></span>Сканирование сектора…</div>',
-      tabs: [{ id: 'overview', label: 'Обзор', html: near }],
-      back: '<button class="back" data-back="body">← Назад</button>',
-    });
+      header: `<div class="kind" style="--c:${b.color}">${t('unexplored')}</div><h2>${formatLatLon(p.lat, p.lon)}</h2><div class="coord">${b.name}</div>`,
+      status: animate ? `<div class="scan"><span></span>${t('scanSector')}</div>` : '',
+      tabs: [{ id: 'overview', label: t('tabOverview'), html: near }],
+      back: `<button class="back" data-back="body">${t('backBody')}</button>`,
+    }, animate);
     this.setLive(p.status);
   }
 

@@ -23,7 +23,7 @@ export const MATERIAL_COLOR: Record<Material, string> = {
 export const GAS_COLOR: Record<string, string> = {
   'H₂': '#7fb3ff', He: '#ffd27f', 'CO₂': '#ff8a65', 'N₂': '#7fe3c4', 'O₂': '#5aa8ff', Ar: '#c79bff',
   'CH₄': '#9cff7f', 'NH₃': '#ff7fd1', 'SO₂': '#ffe066', 'H₂O': '#6fd3ff', CO: '#c9c9c9', Na: '#ffb347',
-  K: '#e0a0ff', O: '#8fd0ff', H: '#b0c8ff', 'другие': '#6f8296',
+  K: '#e0a0ff', O: '#8fd0ff', H: '#b0c8ff', 'другие': '#6f8296', other: '#6f8296',
 };
 
 export interface Layer {

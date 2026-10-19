@@ -108,6 +108,13 @@ body.ready #hud { opacity: 1; }
 #crumbs .cur { color: var(--text); text-transform: uppercase; }
 #crumbs .sep { color: var(--line-strong); }
 
+/* ── Language switch ──────────────────────────────────────────── */
+.lang { flex: none; display: flex; height: 30px; margin-top: -6px; border: 1px solid var(--line); background: rgba(4, 9, 16, .6); }
+.lang button { width: 34px; font-family: var(--mono); font-size: 11px; color: var(--muted); transition: color .15s, background .15s; }
+.lang button + button { border-left: 1px solid var(--line); }
+.lang button:hover { color: var(--text); background: rgba(127, 227, 255, .08); }
+.lang button.on { color: var(--accent); }
+
 /* ── Time control: one compact strip ─────────────────────────── */
 .time {
   position: relative; flex: none; display: flex; align-items: stretch; height: 30px; margin-top: -6px;

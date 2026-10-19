@@ -15,32 +15,35 @@
 
     <div id="hud">
       <header class="topbar">
-        <div class="brand"><span class="logo"></span>COSMIC<em>Навигационная карта</em></div>
+        <div class="brand"><span class="logo"></span>COSMIC<em data-i18n="subtitle">Навигационная карта</em></div>
         <nav id="crumbs"></nav>
+        <div class="lang" data-i18n-title="langTitle">
+          <button data-lang="ru">RU</button><button data-lang="en">EN</button>
+        </div>
         <div class="time">
-          <button id="btn-play" title="Пауза / продолжить (Пробел)" aria-label="Пауза"><i></i></button>
-          <div class="speed" title="Скорость времени (клавиши , и .)">
-            <button id="speed-down" aria-label="Медленнее">‹</button>
+          <button id="btn-play" data-i18n-title="playTitle" aria-label="Пауза"><i></i></button>
+          <div class="speed" data-i18n-title="speedTitle">
+            <button id="speed-down" data-i18n-aria="slower">‹</button>
             <span id="speed-label">1×</span>
-            <button id="speed-up" aria-label="Быстрее">›</button>
+            <button id="speed-up" data-i18n-aria="faster">›</button>
           </div>
-          <button id="date-btn" aria-haspopup="dialog" aria-expanded="false" title="Выбрать дату">
-            <span class="live" title="Реальное время"></span><span id="sim-date">—</span><span class="caret"></span>
+          <button id="date-btn" aria-haspopup="dialog" aria-expanded="false" data-i18n-title="pickDate">
+            <span class="live" data-i18n-title="realtime"></span><span id="sim-date">—</span><span class="caret"></span>
           </button>
           <div id="date-pop" hidden>
-            <label>Дата и время, UTC<input id="date-input" type="datetime-local" step="60" /></label>
-            <button id="btn-now">Сейчас</button>
+            <label><span data-i18n="dateLabel">Дата и время, UTC</span><input id="date-input" type="datetime-local" step="60" /></label>
+            <button id="btn-now" data-i18n="now">Сейчас</button>
           </div>
         </div>
       </header>
 
       <div class="toolbar">
-        <button id="nav-toggle" aria-expanded="false" aria-controls="nav" title="Список объектов">
-          <span class="bars"><i></i><i></i><i></i></span>Объекты
+        <button id="nav-toggle" aria-expanded="false" aria-controls="nav" data-i18n-title="objectsTitle">
+          <span class="bars"><i></i><i></i><i></i></span><span data-i18n="objects">Объекты</span>
         </button>
         <div class="toggles">
-          <button id="btn-orbits" title="Показать или скрыть орбиты">Орбиты</button>
-          <button id="btn-light" title="Подсветка ночной стороны (L)">Подсветка</button>
+          <button id="btn-orbits" data-i18n-title="orbitsTitle" data-i18n="orbits">Орбиты</button>
+          <button id="btn-light" data-i18n-title="lightTitle" data-i18n="light">Подсветка</button>
         </div>
       </div>
       <aside id="nav">
@@ -50,13 +53,13 @@
       <section id="panel"></section>
 
       <footer id="hint"></footer>
-      <button id="btn-credits" class="note">Масштаб условный · Источники и лицензии</button>
+      <button id="btn-credits" class="note" data-i18n="credits">Масштаб условный · Источники и лицензии</button>
     </div>
 
     <dialog id="credits">
       <div class="credits-head">
-        <h2>Источники и лицензии</h2>
-        <button class="credits-close" aria-label="Закрыть">✕</button>
+        <h2 data-i18n="creditsTitle">Источники и лицензии</h2>
+        <button class="credits-close" data-i18n-aria="close">✕</button>
       </div>
       <div id="credits-body"></div>
     </dialog>
@@ -64,7 +67,7 @@
     <div id="loader">
       <div class="loader-inner">
         <div class="loader-title">COSMIC</div>
-        <div class="loader-sub">Загрузка карт поверхностей…</div>
+        <div class="loader-sub" data-i18n="loading">Загрузка карт поверхностей…</div>
         <div class="loader-track"><div id="loader-bar"></div></div>
       </div>
     </div>

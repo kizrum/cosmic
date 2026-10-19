@@ -18,6 +18,8 @@ import type { Site } from './data/bodies';
 import { REGIONS, type RegionDef } from './data/regions';
 import { categoryOf, shapeOf } from './data/siteShapes';
 import { SiteOutline } from './scene/SiteOutlines';
+import { applyStatic, fmtNum, lang, onLangChange, t } from './i18n';
+import { bodyL, regionL } from './data/localize';
 
 // ── Renderer & scene ────────────────────────────────────────────────────────────
 const canvas = document.querySelector<HTMLCanvasElement>('#scene')!;
@@ -139,7 +141,7 @@ for (const b of system.bodies) {
     const el = document.createElement('button');
     el.className = 'site-marker';
     el.style.setProperty('--mc', cat.color);
-    el.innerHTML = `<i></i><span>${site.name}</span>`;
+    el.innerHTML = `<i></i><span></span>`;
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       focusSite(b, site);
@@ -167,7 +169,7 @@ for (const r of REGIONS) {
   anchor.position.set(Math.cos(r.lon * DEG) * s, 0, -Math.sin(r.lon * DEG) * s);
   const el = document.createElement('div');
   el.className = 'body-label region';
-  el.innerHTML = `<span class="dot" style="--c:${r.color}"></span><span class="name">${r.name}</span>`;
+  el.innerHTML = `<span class="dot" style="--c:${r.color}"></span><span class="name">${regionL(r).name}</span>`;
   el.addEventListener('click', (e) => {
     e.stopPropagation();
     focusRegion(r);
@@ -184,6 +186,42 @@ probeEl.className = 'probe-marker';
 probeEl.innerHTML = '<i></i><i></i><i></i>';
 const probeMarker = new CSS2DObject(probeEl);
 probe.add(probeMarker);
+
+// ── Language ────────────────────────────────────────────────────────────────────
+function applyLanguage() {
+  for (const b of system.bodies) {
+    const l = bodyL(b.def);
+    b.label.element.querySelector('.name')!.textContent = l.name;
+    for (const site of l.sites) {
+      const span = b.siteMarkers.get(site.id)?.element.querySelector('span');
+      if (span) span.textContent = site.name;
+    }
+  }
+  for (const r of REGIONS) {
+    const name = regionAnchors.get(r.id)?.children[0] as CSS2DObject | undefined;
+    const span = name?.element.querySelector('.name');
+    if (span) span.textContent = regionL(r).name;
+  }
+  nameWidth.clear();
+  ui.relang();
+  // Re-render the open panel in place (no animation, no re-scan).
+  if (mode === 'system') ui.hint(t('hintSystem'));
+  else if (mode === 'region' && activeRegion) {
+    ui.showRegion(activeRegion, false);
+    ui.hint(t('hintRegion'));
+  } else if (mode === 'body' && focused) {
+    ui.showBody(focused.def, false);
+    ui.hint(focused.def.id === 'sun' ? t('hintSun') : t('hintBody'));
+  } else if (mode === 'site' && focused && focusedSite) {
+    ui.showSite(focused.def, focusedSite, false);
+    ui.hint(lightAuto ? t('hintNight') : t('hintSite'));
+  } else if (mode === 'site' && focused && probeLatLon) {
+    const p = probeLatLon;
+    ui.showPoint(focused.def, { lat: p.lat, lon: p.lon, nearest: probeNearest, status: localConditions(focused, p) }, false);
+    ui.hint(t('hintBack'));
+  }
+  liveTimer = 0;
+}
 
 // ── Navigation ──────────────────────────────────────────────────────────────────
 const OVERVIEW = new THREE.Vector3(0, 300, 470);
@@ -206,14 +244,18 @@ function goSystem() {
   setSurfaceView(null);
   probe.removeFromParent();
   ui.showSystem();
-  ui.hint('Выберите объект — кликом по нему, по метке или в списке «Объекты»');
+  ui.hint(t('hintSystem'));
   director.flyTo({
     anchor: null, position: OVERVIEW.clone(), target: new THREE.Vector3(), minDistance: 30, maxDistance: 3000,
     avoid: { center: () => new THREE.Vector3(), radius: system.get('sun').radius * 1.3 },
   });
 }
 
+let activeRegion: RegionDef | null = null;
+let probeNearest: { site: Site; km: number } | undefined;
+
 function focusRegion(r: RegionDef) {
+  activeRegion = r;
   leaveSite();
   mode = 'region';
   focused = null;
@@ -221,7 +263,7 @@ function focusRegion(r: RegionDef) {
   setSurfaceView(null);
   probe.removeFromParent();
   ui.showRegion(r);
-  ui.hint('Вращайте камеру мышью · колесо — приближение · Esc — назад');
+  ui.hint(t('hintRegion'));
   const target = regionAnchors.get(r.id)!.position.clone();
   const dir = target.clone().normalize();
   const position = dir.clone().multiplyScalar(sceneDistance(r.viewAu)).add(new THREE.Vector3(0, r.viewHeight, 0));
@@ -237,7 +279,7 @@ function focusBody(b: Body) {
   probe.removeFromParent();
   setSurfaceView(null);
   ui.showBody(b.def);
-  ui.hint(b.def.id === 'sun' ? 'Esc — назад к системе' : 'Вращайте камеру мышью · колесо — приближение · клик по поверхности — сканирование · Esc — назад');
+  ui.hint(b.def.id === 'sun' ? t('hintSun') : t('hintBody'));
 
   const center = b.getWorldPosition();
   const R = b.radius;
@@ -306,7 +348,7 @@ function focusSite(b: Body, s: Site) {
   focusedSite = s;
   probe.removeFromParent();
   ui.showSite(b.def, s);
-  ui.hint('Вращайте камеру вокруг района · колесо — высота · Esc — назад');
+  ui.hint(t('hintSite'));
   surfaceView(b, b.siteAnchors.get(s.id)!, s.elevation ? 0.9 : 0.42);
   if (!s.elevation) autoLight(b, s);
 }
@@ -314,11 +356,11 @@ function focusSite(b: Body, s: Site) {
 /** Night-side sites would be black: switch the fill light on (and off again when leaving). */
 let lightAuto = false;
 function autoLight(b: Body, p: { lat: number; lon: number }) {
-  const night = localConditions(b, p)[0].value === 'ночь' && b.def.id !== 'earth';
+  const night = sunElevation(b, p) < -6 && b.def.id !== 'earth';
   if (night && !lightBoost) {
     lightBoost = lightAuto = true;
     ui.setToggle('light', true);
-    ui.hint('Район на ночной стороне — включена подсветка (L) · Esc — назад');
+    ui.hint(t('hintNight'));
   } else if (!night) clearAutoLight();
 }
 function clearAutoLight() {
@@ -342,8 +384,9 @@ function scanPoint(b: Body, worldPoint: THREE.Vector3) {
     const km = surfaceDistanceKm(b.def.radiusKm, { lat, lon }, s);
     if (!nearest || km < nearest.km) nearest = { site: s, km };
   }
+  probeNearest = nearest;
   ui.showPoint(b.def, { lat, lon, nearest, status: localConditions(b, { lat, lon }) });
-  ui.hint('Esc — назад');
+  ui.hint(t('hintBack'));
   surfaceView(b, probe, 0.42);
   autoLight(b, { lat, lon });
 }
@@ -364,16 +407,16 @@ const tmpA = new THREE.Vector3();
 const tmpB = new THREE.Vector3();
 
 function fmtKm(km: number) {
-  if (km > 1e9) return `${(km / 1e9).toLocaleString('ru-RU', { maximumFractionDigits: 3 })} млрд км`;
-  if (km > 1e6) return `${(km / 1e6).toLocaleString('ru-RU', { maximumFractionDigits: 1 })} млн км`;
-  return `${Math.round(km).toLocaleString('ru-RU')} км`;
+  if (km > 1e9) return `${fmtNum(km / 1e9, { maximumFractionDigits: 3 })} ${t('bnKm')}`;
+  if (km > 1e6) return `${fmtNum(km / 1e6, { maximumFractionDigits: 1 })} ${t('mnKm')}`;
+  return `${fmtNum(Math.round(km))} ${t('km')}`;
 }
 
 function fmtLight(km: number) {
   const s = km / LIGHT_KM_S;
-  if (s < 60) return `${s.toFixed(1)} с`;
-  if (s < 3600) return `${Math.floor(s / 60)} мин ${Math.round(s % 60)} с`;
-  return `${Math.floor(s / 3600)} ч ${Math.round((s % 3600) / 60)} мин`;
+  if (s < 60) return `${fmtNum(s, { maximumFractionDigits: 1 })} ${t('sec')}`;
+  if (s < 3600) return `${Math.floor(s / 60)} ${t('min')} ${Math.round(s % 60)} ${t('sec')}`;
+  return `${Math.floor(s / 3600)} ${t('hr')} ${Math.round((s % 3600) / 60)} ${t('min')}`;
 }
 
 /** Heliocentric position of a body (km is converted to AU for moons via the parent). */
@@ -401,29 +444,30 @@ function bodyStats(b: Body): LiveStat[] {
   const earth = system.get('earth');
   if (def.id === 'sun') {
     const km = helioAu(earth, tmpA).length() * AU_KM;
-    out.push({ label: 'Расстояние до Земли сейчас', value: fmtKm(km) });
-    out.push({ label: 'Свет идёт до Земли', value: fmtLight(km) });
+    out.push({ label: t('distEarthNow'), value: fmtKm(km) });
+    out.push({ label: t('lightToEarth'), value: fmtLight(km) });
     return out;
   }
   if (def.group === 'moon' && b.parent) {
     const rel = new THREE.Vector3();
     const km = def.id === 'moon' ? moonPosition(simDays, rel) : keplerPosition(elementsAt(def.orbit!, simDays), rel);
-    out.push({ label: `Расстояние до ${GENITIVE[b.parent.def.id] ?? b.parent.def.name}`, value: fmtKm(km) });
+    const parentName = lang === 'ru' ? GENITIVE[b.parent.def.id] ?? b.parent.def.name : bodyL(b.parent.def).name;
+    out.push({ label: t('distTo', parentName), value: fmtKm(km) });
   }
   const helio = helioAu(b, tmpA);
-  if (def.group !== 'moon') out.push({ label: 'Расстояние до Солнца сейчас', value: `${fmtKm(helio.length() * AU_KM)} (${helio.length().toFixed(3)} а.е.)` });
+  if (def.group !== 'moon') out.push({ label: t('distSunNow'), value: `${fmtKm(helio.length() * AU_KM)} (${fmtNum(helio.length(), { maximumFractionDigits: 3 })} ${t('au')})` });
   if (def.id !== 'earth' && def.id !== 'moon') {
     const km = helio.distanceTo(helioAu(earth, tmpB)) * AU_KM;
-    out.push({ label: 'Расстояние до Земли сейчас', value: fmtKm(km) });
-    out.push({ label: 'Сигнал от Земли идёт', value: fmtLight(km) });
+    out.push({ label: t('distEarthNow'), value: fmtKm(km) });
+    out.push({ label: t('signalFromEarth'), value: fmtLight(km) });
   }
-  if (def.id === 'moon') out.push({ label: 'Фаза', value: moonPhase() });
+  if (def.id === 'moon') out.push({ label: t('phase'), value: moonPhase() });
   if (def.id === 'saturn') {
     // Solar elevation above the ring plane: which face of the rings is lit.
     const pole = new THREE.Vector3(0, 1, 0).applyQuaternion(b.tilt.getWorldQuaternion(new THREE.Quaternion()));
     const toSun = b.getWorldPosition(tmpA).negate().normalize();
     const el = (Math.asin(pole.dot(toSun)) * 180) / Math.PI;
-    out.push({ label: 'Солнце над плоскостью колец', value: `${el.toFixed(1)}° (освещена ${el >= 0 ? 'северная' : 'южная'} сторона)` });
+    out.push({ label: t('ringSun'), value: t(el >= 0 ? 'ringLitN' : 'ringLitS', fmtNum(el, { maximumFractionDigits: 1 })) });
   }
   return out;
 }
@@ -437,8 +481,17 @@ function moonPhase() {
   // Waxing when the Moon is east of the Sun: Sun→Moon turns counter-clockwise about ecliptic north (+Y).
   const waxing = toSun.cross(toMoon).y > 0;
   const pct = Math.round(illum * 100);
-  const name = pct < 3 ? 'новолуние' : pct > 97 ? 'полнолуние' : pct < 50 ? (waxing ? 'растущий серп' : 'убывающий серп') : waxing ? 'растущая Луна' : 'убывающая Луна';
-  return `${name}, освещено ${pct} %`;
+  const name = t(pct < 3 ? 'newMoon' : pct > 97 ? 'fullMoon' : pct < 50 ? (waxing ? 'waxCrescent' : 'wanCrescent') : waxing ? 'waxing' : 'waning');
+  return t('illuminated', name, pct);
+}
+
+/** Height of the Sun above the local horizon, degrees. */
+function sunElevation(b: Body, p: { lat: number; lon: number }) {
+  const center = b.getWorldPosition(tmpA);
+  const sub = localToLatLon(b.spin.worldToLocal(new THREE.Vector3()).sub(b.spin.worldToLocal(center.clone())));
+  const lat = p.lat * DEG, slat = sub.lat * DEG;
+  const cosZ = Math.sin(lat) * Math.sin(slat) + Math.cos(lat) * Math.cos(slat) * Math.cos((p.lon - sub.lon) * DEG);
+  return Math.asin(THREE.MathUtils.clamp(cosZ, -1, 1)) / DEG;
 }
 
 /** Day/night and local solar time at a surface point, from the actual sun direction. */
@@ -452,12 +505,12 @@ function localConditions(b: Body, p: { lat: number; lon: number }): LiveStat[] {
   const lat = p.lat * DEG, slat = sub.lat * DEG;
   const cosZ = Math.sin(lat) * Math.sin(slat) + Math.cos(lat) * Math.cos(slat) * Math.cos((p.lon - sub.lon) * DEG);
   const elev = Math.asin(THREE.MathUtils.clamp(cosZ, -1, 1)) / DEG;
-  const state = elev > 6 ? 'день' : elev > -6 ? 'сумерки, терминатор' : 'ночь';
+  const state = t(elev > 6 ? 'day' : elev > -6 ? 'twilight' : 'night');
   const hh = Math.floor(hour), mm = Math.floor((hour - hh) * 60);
   const out: LiveStat[] = [
-    { label: 'Освещение', value: state },
-    { label: 'Высота Солнца над горизонтом', value: `${elev.toFixed(1)}°` },
-    { label: 'Местное солнечное время', value: `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}` },
+    { label: t('lighting'), value: state },
+    { label: t('sunElev'), value: `${fmtNum(elev, { maximumFractionDigits: 1, minimumFractionDigits: 1 })}°` },
+    { label: t('solarTime'), value: `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}` },
   ];
   if (b.def.locked && b.parent) {
     // Synchronous moons: the parent hangs motionless in the sky of the near side.
@@ -466,7 +519,7 @@ function localConditions(b: Body, p: { lat: number; lon: number }): LiveStat[] {
     const pl = sp.lat * DEG;
     const cosP = Math.sin(lat) * Math.sin(pl) + Math.cos(lat) * Math.cos(pl) * Math.cos((p.lon - sp.lon) * DEG);
     const pe = Math.asin(THREE.MathUtils.clamp(cosP, -1, 1)) / DEG;
-    out.push({ label: `${b.parent.def.name} над горизонтом`, value: pe > 0 ? `${pe.toFixed(1)}°, всегда на месте` : 'не видна отсюда' });
+    out.push({ label: t('aboveHorizon', bodyL(b.parent.def).name), value: pe > 0 ? t('fixedInSky', fmtNum(pe, { maximumFractionDigits: 1 })) : t('notVisible') });
   }
   return out;
 }
@@ -655,7 +708,7 @@ function updateMarkers() {
 }
 
 const LABEL_PRIORITY: Record<string, number> = { star: 0, planet: 1, dwarf: 2, moon: 4 };
-const nameWidth = new WeakMap<HTMLElement, number>();
+const nameWidth = new Map<HTMLElement, number>();
 const labelPos = new THREE.Vector3();
 
 /**
@@ -760,6 +813,10 @@ function frame(now: number) {
   labelRenderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
+
+applyStatic();
+applyLanguage();
+onLangChange(applyLanguage);
 
 manager.onProgress = (_url, loaded, total) => ui.loading(loaded / total);
 manager.onLoad = () => {

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { tList } from './i18n';
 
 /**
  * Astronomy core: time, frames and orbital mechanics.
@@ -213,7 +214,9 @@ export function surfaceDistanceKm(radiusKm: number, a: { lat: number; lon: numbe
 }
 
 export function formatLatLon(lat: number, lon: number) {
-  const la = `${Math.abs(lat).toFixed(2)}° ${lat >= 0 ? 'с. ш.' : 'ю. ш.'}`;
-  const lo = `${Math.abs(lon).toFixed(2)}° ${lon >= 0 ? 'в. д.' : 'з. д.'}`;
+  const [n, s] = tList('lat');
+  const [e, w] = tList('lon');
+  const la = `${Math.abs(lat).toFixed(2)}° ${lat >= 0 ? n : s}`;
+  const lo = `${Math.abs(lon).toFixed(2)}° ${lon >= 0 ? e : w}`;
   return `${la}, ${lo}`;
 }
