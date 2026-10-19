@@ -614,6 +614,25 @@ function pickSurface(x: number, y: number) {
   return raycaster.intersectObject(focused.surface, false)[0] ?? null;
 }
 
+// The wheel over labels and site markers (HTML on top of the canvas) belongs to the scene:
+// hand it to the camera controls instead of letting the overlay swallow it.
+document.querySelector('#labels')!.addEventListener('wheel', (e) => {
+  const w = e as WheelEvent;
+  w.preventDefault();
+  renderer.domElement.dispatchEvent(new WheelEvent('wheel', {
+    deltaX: w.deltaX, deltaY: w.deltaY, deltaZ: w.deltaZ, deltaMode: w.deltaMode,
+    clientX: w.clientX, clientY: w.clientY, ctrlKey: w.ctrlKey, metaKey: w.metaKey, shiftKey: w.shiftKey,
+    bubbles: true, cancelable: true,
+  }));
+}, { passive: false });
+// Pinch on a touchpad arrives as ctrl+wheel: never let the browser zoom the whole page.
+// (Over the canvas the controls turn it into a camera zoom.)
+window.addEventListener('wheel', (e) => {
+  if (e.ctrlKey) e.preventDefault();
+}, { passive: false });
+// Safari's own pinch gesture events.
+for (const type of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(type, (e) => e.preventDefault());
+
 renderer.domElement.addEventListener('pointerdown', (e) => (downAt = { x: e.clientX, y: e.clientY }));
 renderer.domElement.addEventListener('pointerup', (e) => {
   if (!downAt || director.flying) return;
