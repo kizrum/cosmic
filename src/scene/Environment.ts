@@ -12,7 +12,7 @@ export function createSky(loader: THREE.TextureLoader) {
   // Seen from inside, longitude must increase to the left: mirror U.
   const uv = geo.attributes.uv as THREE.BufferAttribute;
   for (let i = 0; i < uv.count; i++) uv.setX(i, 1 - uv.getX(i));
-  const mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, depthWrite: false, color: new THREE.Color(0.55, 0.55, 0.6) });
+  const mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, depthWrite: false, color: new THREE.Color(0.62, 0.6, 0.6) });
   const sky = new THREE.Mesh(geo, mat);
   const gc = equToScene(266.405, -28.936);
   const ngp = equToScene(192.859, 27.128);
@@ -21,6 +21,12 @@ export function createSky(loader: THREE.TextureLoader) {
   sky.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, ngp, z));
   sky.renderOrder = -10;
   sky.frustumCulled = false;
+  // Stars are effectively at infinity: the sky moves with the camera, so it never distorts
+  // or drifts away however far the camera travels.
+  sky.onBeforeRender = (_r, _s, camera) => {
+    sky.position.copy(camera.position);
+    sky.updateMatrixWorld();
+  };
   return sky;
 }
 
