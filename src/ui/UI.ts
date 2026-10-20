@@ -558,9 +558,21 @@ export class UI {
     this.setLive(p.status);
   }
 
+  /** Live values tick several times a second: update the numbers in place when the rows
+   *  are unchanged, so nothing re-flows or flickers. */
   setLive(stats: LiveStat[]) {
     const el = this.live();
-    if (el) el.innerHTML = factsTable(stats);
+    if (!el) return;
+    const rows = el.querySelectorAll('.facts > div');
+    const same = rows.length === stats.length && stats.every((s, i) => rows[i].querySelector('dt')!.textContent === s.label);
+    if (!same) {
+      el.innerHTML = factsTable(stats);
+      return;
+    }
+    stats.forEach((s, i) => {
+      const dd = rows[i].querySelector('dd')!;
+      if (dd.textContent !== s.value) dd.textContent = s.value;
+    });
   }
 
   private hintTimer = 0;

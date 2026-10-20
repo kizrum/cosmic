@@ -25,8 +25,13 @@ import { bodyL, regionL } from './data/localize';
 
 // ── Renderer & scene ────────────────────────────────────────────────────────────
 const canvas = document.querySelector<HTMLCanvasElement>('#scene')!;
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// The scene is drawn into the post-processing target below, so anti-aliasing belongs there
+// (multisampled render target); the default framebuffer only receives a full-screen quad.
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
+// Start at up to 1.5× device pixels; the adaptive quality loop below lowers it if needed.
+const MAX_DPR = Math.min(window.devicePixelRatio, 1.5);
+let renderScale = MAX_DPR;
+renderer.setPixelRatio(renderScale);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
@@ -47,7 +52,9 @@ controls.rotateSpeed = 0.45;
 controls.zoomSpeed = 0.9;
 controls.enabled = false;
 
-const composer = new EffectComposer(renderer);
+const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
+composer.setPixelRatio(renderScale);
+composer.setSize(window.innerWidth, window.innerHeight);
 composer.addPass(new RenderPass(scene, camera));
 // High threshold: only HDR sources (the Sun, city lights, glints) bloom, not sunlit clouds.
 const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.7, 0.45, 1.15);
@@ -710,9 +717,48 @@ window.addEventListener('resize', () => {
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
+  composer.setPixelRatio(renderScale);
   composer.setSize(w, h);
   labelRenderer.setSize(w, h);
 });
+
+/**
+ * Adaptive quality: weak GPUs (laptop integrated graphics, large browser windows) get a
+ * lower render resolution and, if still slow, no bloom — instead of a stuttering page.
+ */
+let qFrames = 0, qTime = 0, slowStreak = 0, fastStreak = 0;
+function adaptQuality(dt: number) {
+  qFrames++;
+  qTime += dt;
+  if (qTime < 1.5) return;
+  const fps = qFrames / qTime;
+  qFrames = 0;
+  qTime = 0;
+  if (fps < 38) { slowStreak++; fastStreak = 0; } else if (fps > 56) { fastStreak++; slowStreak = 0; } else { slowStreak = fastStreak = 0; }
+  let next = renderScale;
+  if (slowStreak >= 1 && renderScale > 0.75) next = Math.max(0.75, renderScale * 0.85);
+  else if (fastStreak >= 3 && renderScale < MAX_DPR) next = Math.min(MAX_DPR, renderScale * 1.15);
+  if (fps < 28 && renderScale <= 0.76) bloom.enabled = false;
+  if (fastStreak >= 3) bloom.enabled = true;
+  if (next !== renderScale) {
+    renderScale = next;
+    renderer.setPixelRatio(renderScale);
+    composer.setPixelRatio(renderScale);
+    composer.setSize(window.innerWidth, window.innerHeight);
+    fastStreak = 0;
+  }
+}
+
+/** Chrome with hardware acceleration off renders WebGL on the CPU: say so once. */
+function detectSoftwareGL() {
+  const gl = renderer.getContext();
+  const ext = gl.getExtension('WEBGL_debug_renderer_info');
+  const name = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+  if (/swiftshader|llvmpipe|software|basic render/i.test(name)) {
+    const el = document.querySelector<HTMLElement>('#gpu-warning');
+    if (el) el.hidden = false;
+  }
+}
 
 // ── Per-frame presentation ──────────────────────────────────────────────────────
 const occluder = new THREE.Sphere();
@@ -911,6 +957,7 @@ function frame(now: number) {
   ui.setDate(dateFromDays(simDays));
   ui.setRealtime(speedIndex === 1 && Math.abs(simDays - daysFromDate(Date.now())) < 2 / 1440);
 
+  adaptQuality(dt);
   composer.render();
   labelRenderer.render(scene, camera);
   requestAnimationFrame(frame);
@@ -918,6 +965,7 @@ function frame(now: number) {
 
 applyStatic();
 applyLanguage();
+detectSoftwareGL();
 onLangChange(applyLanguage);
 
 ui.loading(0);
