@@ -79,6 +79,9 @@ export class Body {
   surface!: THREE.Mesh;
   label!: CSS2DObject;
   orbitLine?: THREE.Line;
+  /** Orbit phase (deg) and scale blend at the last line sampling. */
+  sampledAt = NaN;
+  sampledScale = NaN;
   readonly axis: THREE.Line;
   readonly siteAnchors = new Map<string, THREE.Object3D>();
   readonly siteMarkers = new Map<string, CSS2DObject>();
@@ -259,7 +262,6 @@ export class SolarSystem {
   private corona!: THREE.Mesh;
   private readonly loader: THREE.TextureLoader;
   private readonly anisotropy: number;
-  private orbitClock = 0;
 
   constructor(manager: THREE.LoadingManager, anisotropy: number, d: number) {
     this.loader = new THREE.TextureLoader(manager);
@@ -518,6 +520,8 @@ export class SolarSystem {
    * the small residual gap is spread along the loop.
    */
   private sampleOrbit(b: Body, d: number) {
+    b.sampledAt = this.orbitPhase(b, d);
+    b.sampledScale = scale.t;
     const line = b.orbitLine!;
     const pos = line.geometry.attributes.position as THREE.BufferAttribute;
     const N = pos.count - 1;
@@ -553,28 +557,35 @@ export class SolarSystem {
     pos.needsUpdate = true;
   }
 
-  /** Body whose orbit (and moons' orbits) is refreshed every frame. */
+  /** Body whose orbit line is kept tightly anchored (re-sampled as soon as it moves). */
   focus: Body | null = null;
 
-  private lastScale = 0;
+  /** Position along the orbit, in degrees of mean longitude (the Moon: from elapsed days). */
+  private orbitPhase(b: Body, d: number) {
+    if (b.def.id === 'moon') return (d / 27.321661) * 360;
+    return elementsAt(b.def.orbit!, d).L;
+  }
 
   update(d: number, spinDays: number, dt: number) {
     for (const b of this.bodies) b.update(d, spinDays, dt);
     this.corona.scale.setScalar(this.get('sun').sizeScale);
-    // While the scale animates every orbit line is re-sampled.
-    if (scale.t !== this.lastScale) {
-      this.lastScale = scale.t;
-      for (const b of this.bodies) if (b.orbitLine) this.sampleOrbit(b, d);
-    }
-    // Lines are re-anchored at the bodies twice a second (every frame for the focused system),
-    // so the densest part of each line always sits where the body is.
-    this.orbitClock -= dt;
-    if (this.orbitClock <= 0) {
-      this.orbitClock = 0.5;
-      for (const b of this.bodies) if (b.orbitLine) this.sampleOrbit(b, d);
-    } else if (this.focus) {
-      const f = this.focus;
-      for (const b of this.bodies) if (b.orbitLine && (b === f || b.parent === f || b === f.parent)) this.sampleOrbit(b, d);
+    // Orbit lines are only re-sampled when it matters: the scale changed, or the body has
+    // moved far enough along its orbit that the dense part of the line (and, at true scale,
+    // the precision anchor) should follow it. Lines of other bodies are refreshed within a
+    // small per-frame budget, so time warp never turns into a CPU spike.
+    let budget = 3;
+    for (const b of this.bodies) {
+      if (!b.orbitLine) continue;
+      const scaleChanged = b.sampledScale !== scale.t;
+      const moved = Math.abs(this.orbitPhase(b, d) - b.sampledAt);
+      const isFocus = b === this.focus;
+      const limit = isFocus ? 0.25 : b.def.group === 'moon' ? 20 : 1.5;
+      if (scaleChanged || (isFocus && moved > limit)) {
+        this.sampleOrbit(b, d);
+      } else if (moved > limit && budget > 0) {
+        this.sampleOrbit(b, d);
+        budget--;
+      }
     }
   }
 

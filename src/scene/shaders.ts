@@ -32,6 +32,8 @@ float snoise(vec3 v){
   return 42.*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
 }
 float fbm(vec3 p){float f=0.,a=.5;for(int i=0;i<5;i++){f+=a*snoise(p);p*=2.03;a*=.5;}return f;}
+// Coarse variant for soft, large-scale effects (corona streamers): finer octaves are invisible there.
+float fbm3(vec3 p){float f=0.,a=.5;for(int i=0;i<3;i++){f+=a*snoise(p);p*=2.03;a*=.5;}return f;}
 `;
 
 const raySphere = /* glsl */ `
@@ -111,7 +113,8 @@ void main(){
   if (r < 0.98) discard;
   float a = atan(vUv.y, vUv.x);
   vec3 q = vec3(cos(a) * 1.6, sin(a) * 1.6, uTime * 0.03);
-  float streak = fbm(q + vec3(0.0, 0.0, r * 0.15)) * 0.5 + 0.5;
+  if (r > uScale) discard;
+  float streak = fbm3(q + vec3(0.0, 0.0, r * 0.15)) * 0.5 + 0.5;
   float glow = exp(-(r - 1.0) * 3.2) * 1.1 + exp(-(r - 1.0) * 0.9) * 0.12 * (0.3 + streak);
   glow *= smoothstep(uScale, uScale * 0.6, r);
   vec3 col = mix(vec3(1.0, 0.55, 0.2), vec3(1.0, 0.85, 0.65), exp(-(r - 1.0) * 1.5));
@@ -157,7 +160,7 @@ void main(){
   if (tp.x > 0.0) t1 = min(t1, tp.x);
   float H = uRa - uRp;
   vec3 L = normalize(uSunPos - uCenter);
-  const int N = 12;
+  const int N = 8;
   float seg = (t1 - t0) / float(N);
   vec3 sum = vec3(0.0);
   float od = 0.0;

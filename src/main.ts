@@ -3,9 +3,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { MsaaScenePass } from './scene/MsaaScenePass';
 import {
   AU_KM, DEG, LIGHT_KM_S, dateFromDays, daysFromDate, elementsAt, keplerPosition, localToLatLon, moonPosition,
   orbitalPosition, surfaceDistanceKm,
@@ -52,12 +52,17 @@ controls.rotateSpeed = 0.45;
 controls.zoomSpeed = 0.9;
 controls.enabled = false;
 
-const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
+const composer = new EffectComposer(renderer);
 composer.setPixelRatio(renderScale);
 composer.setSize(window.innerWidth, window.innerHeight);
-composer.addPass(new RenderPass(scene, camera));
+// Anti-aliasing lives in the scene pass only (see MsaaScenePass).
+const scenePass = new MsaaScenePass(scene, camera, 4);
+composer.addPass(scenePass);
 // High threshold: only HDR sources (the Sun, city lights, glints) bloom, not sunlit clouds.
 const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.7, 0.45, 1.15);
+// Bloom is a wide blur: computing it at half resolution looks the same and costs a quarter.
+const bloomSetSize = bloom.setSize.bind(bloom);
+bloom.setSize = (w: number, h: number) => bloomSetSize(Math.max(1, Math.round(w / 2)), Math.max(1, Math.round(h / 2)));
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
@@ -736,8 +741,11 @@ function adaptQuality(dt: number) {
   qTime = 0;
   if (fps < 38) { slowStreak++; fastStreak = 0; } else if (fps > 56) { fastStreak++; slowStreak = 0; } else { slowStreak = fastStreak = 0; }
   let next = renderScale;
+  // Order of sacrifices: 4× → 2× anti-aliasing first, then resolution; restored in reverse.
+  if (slowStreak >= 1 && scenePass.samples > 2) { scenePass.samples = 2; return; }
   if (slowStreak >= 1 && renderScale > 0.75) next = Math.max(0.75, renderScale * 0.85);
   else if (fastStreak >= 3 && renderScale < MAX_DPR) next = Math.min(MAX_DPR, renderScale * 1.15);
+  else if (fastStreak >= 3 && scenePass.samples < 4) { scenePass.samples = 4; fastStreak = 0; return; }
   if (fps < 28 && renderScale <= 0.76) bloom.enabled = false;
   if (fastStreak >= 3) bloom.enabled = true;
   if (next !== renderScale) {
@@ -979,4 +987,4 @@ manager.onLoad = () => {
 requestAnimationFrame(frame);
 
 // Dev-only handle for debugging from the browser console / automated checks.
-if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__cosmic = { system, camera, controls, scale };
+if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__cosmic = { system, camera, controls, scale, bloom, composer, scene, belt, kuiper, renderer, scenePass };
