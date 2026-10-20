@@ -1,0 +1,9 @@
+{
+  // Tasks (including the npm scripts VS Code detects in package.json) and debug sessions run
+  // in cmd.exe on Windows. In PowerShell `npm` resolves to npm.ps1, which the default
+  // execution policy ("running scripts is disabled on this system") refuses to start.
+  "terminal.integrated.automationProfile.windows": {
+    "path": "cmd.exe",
+    "args": ["/d"]
+  }
+}

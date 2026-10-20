@@ -1,0 +1,62 @@
+{
+  "version": "2.0.0",
+  // On Windows each task calls npm.cmd: in PowerShell plain `npm` resolves to npm.ps1, which
+  // the default execution policy ("running scripts is disabled") refuses to start.
+  "tasks": [
+    {
+      "label": "Cosmic: запуск (dev-сервер)",
+      "detail": "npm run dev — http://localhost:5173, изменения подхватываются на лету",
+      "type": "shell",
+      "command": "npm run dev",
+      "windows": { "command": "npm.cmd run dev" },
+      "isBackground": true,
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": { "regexp": "^__never_matches__$" },
+        "background": {
+          "activeBegins": true,
+          "beginsPattern": "VITE",
+          "endsPattern": "ready in|Local"
+        }
+      }
+    },
+    {
+      "label": "Cosmic: сборка",
+      "detail": "npm run build — проверка типов и статическая сборка в dist/",
+      "type": "shell",
+      "command": "npm run build",
+      "windows": { "command": "npm.cmd run build" },
+      "group": "build",
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "Cosmic: просмотр сборки",
+      "detail": "npm run preview — раздаёт dist/ на http://localhost:4173",
+      "type": "shell",
+      "command": "npm run preview",
+      "windows": { "command": "npm.cmd run preview" },
+      "dependsOn": "Cosmic: сборка",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "vite-preview",
+        "pattern": { "regexp": "^__never_matches__$" },
+        "background": {
+          "activeBegins": true,
+          "beginsPattern": ".",
+          "endsPattern": "ready in|Local"
+        }
+      }
+    },
+    {
+      "label": "Cosmic: проверка орбит",
+      "detail": "npm run check:layout — порядок орбит, пояса, системы спутников",
+      "type": "shell",
+      "command": "npm run check:layout",
+      "windows": { "command": "npm.cmd run check:layout" },
+      "group": "test",
+      "problemMatcher": []
+    }
+  ]
+}
