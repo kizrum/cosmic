@@ -5,7 +5,7 @@ import { SUN_RADIUS, layoutMoons, moonDistance, visualRadius } from './layout';
 import { EARTH_KM, blend, helioDistance, scale } from './scale';
 import { BODIES, type BodyDef, type Site } from '../data/bodies';
 import {
-  DEG, basisFromPole, elementsAt, equToScene, keplerPosition, latLonToLocal, moonPosition, orbitNormal,
+  DEG, type Kepler, basisFromPole, elementsAt, equToScene, keplerPosition, latLonToLocal, moonPosition, orbitNormal,
   orbitalPosition,
 } from '../astro';
 import {
@@ -16,6 +16,11 @@ import {
 export { visualRadius };
 
 const SUN_POS = new THREE.Vector3(0, 0, 0);
+// Scratch for orbit-line sampling (runs within the per-frame update).
+const orbitV = new THREE.Vector3();
+const orbitGap = new THREE.Vector3();
+const kStart: Kepler = { a: 0, e: 0, i: 0, node: 0, peri: 0, L: 0 };
+const kStep: Kepler = { ...kStart };
 
 interface AtmosphereStyle {
   scale: number; color: [number, number, number]; sunset: [number, number, number];
@@ -525,21 +530,21 @@ export class SolarSystem {
     const line = b.orbitLine!;
     const pos = line.geometry.attributes.position as THREE.BufferAttribute;
     const N = pos.count - 1;
-    const v = new THREE.Vector3();
+    const v = orbitV;
     const warp = (x: number) => x - (0.9 * Math.sin(2 * Math.PI * x)) / (2 * Math.PI);
     if (b.def.id === 'moon') {
       for (let k = 0; k <= N; k++) {
         b.orbitPoint(d + 27.321661 * warp(k / N), v);
         pos.setXYZ(k, v.x, v.y, v.z);
       }
-      const gap = new THREE.Vector3(pos.getX(N) - pos.getX(0), pos.getY(N) - pos.getY(0), pos.getZ(N) - pos.getZ(0));
+      const gap = orbitGap.set(pos.getX(N) - pos.getX(0), pos.getY(N) - pos.getY(0), pos.getZ(N) - pos.getZ(0));
       for (let k = 1; k <= N; k++) {
         const f = warp(k / N);
         pos.setXYZ(k, pos.getX(k) - gap.x * f, pos.getY(k) - gap.y * f, pos.getZ(k) - gap.z * f);
       }
     } else {
-      const k0 = { ...elementsAt(b.def.orbit!, d) };
-      const kk = { ...k0 };
+      const k0 = Object.assign(kStart, elementsAt(b.def.orbit!, d));
+      const kk = Object.assign(kStep, k0);
       const isMoon = b.def.group === 'moon' && b.parent;
       // Vertices are stored relative to the body's current position (the line object sits
       // there): at true scale coordinates reach ~10⁶ and float32 would lose ~0.1 unit —

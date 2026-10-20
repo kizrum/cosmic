@@ -4,6 +4,7 @@ import { formatLatLon } from '../astro';
 import { categoryOf } from '../data/siteShapes';
 import { bodyByIdL, bodyL, creditsL, noticesL, regionL, regionsL, scienceL } from '../data/localize';
 import { EN_TIME } from '../data/en/misc';
+import { RANGES, type Accuracy } from '../data/validity';
 import { fmtNum, lang, locale, setLang, t, type Lang } from '../i18n';
 import { featureChips, statTiles, structureView } from './scienceViews';
 import * as sound from './sound';
@@ -154,6 +155,7 @@ export class UI {
     this.renderCredits();
     this.setSpeedIndex(this.speedIndex);
     this.lastDate = '';
+    this.renderAccuracy();
   }
 
   // ── Object list ─────────────────────────────────────────────────────────────
@@ -304,6 +306,7 @@ export class UI {
       this.h.resetNow();
       setPop(false);
     });
+    $('#btn-acc-now').addEventListener('click', () => this.h.resetNow());
     this.dateInput.addEventListener('change', () => {
       // The input is in UTC (the whole UI shows UTC).
       const ms = Date.parse(this.dateInput.value + ':00Z');
@@ -349,6 +352,27 @@ export class UI {
     const el = $(`#btn-${id}`);
     el.classList.toggle('on', on);
     el.setAttribute('aria-checked', String(on));
+  }
+
+  private accuracy: Accuracy = 'ok';
+
+  /** Banner (and amber date) when the date is outside the years the ephemerides are checked for. */
+  setAccuracy(a: Accuracy) {
+    if (a === this.accuracy) return;
+    this.accuracy = a;
+    this.renderAccuracy();
+  }
+
+  private renderAccuracy() {
+    const a = this.accuracy;
+    const el = $('#accuracy');
+    el.hidden = a === 'ok';
+    $('#date-btn').classList.toggle('inexact', a !== 'ok');
+    if (a === 'ok') return;
+    const [from, to] = a === 'all' ? RANGES.planets : RANGES.fitted;
+    el.dataset.level = a;
+    el.querySelector('b')!.textContent = t(a === 'all' ? 'accAllTitle' : 'accMoonsTitle');
+    el.querySelector('span')!.textContent = t(a === 'all' ? 'accAll' : 'accMoons', from, to);
   }
 
   setDate(d: Date) {

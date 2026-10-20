@@ -80,6 +80,10 @@ const RU = {
   dateLabel: 'Дата и время, UTC',
   now: 'Сейчас',
   langTitle: 'Язык интерфейса',
+  accMoonsTitle: 'Спутники — приблизительно',
+  accMoons: 'Орбиты спутников планет, Цереры и Плутона рассчитаны на {0}–{1} гг. В другие годы их положения могут заметно расходиться с реальными. Планеты и Луна показаны точно.',
+  accAllTitle: 'Вне диапазона точности',
+  accAll: 'Модель проверена для {0}–{1} гг. В другие годы положения планет приблизительны, а спутников — заметно неточны.',
 
   navPlanets: 'Солнце и планеты',
   navDwarfs: 'Карликовые планеты',
@@ -233,6 +237,10 @@ const EN: Dict = {
   dateLabel: 'Date & time, UTC',
   now: 'Now',
   langTitle: 'Interface language',
+  accMoonsTitle: 'Moons approximate',
+  accMoons: 'The orbits of the planets’ moons, Ceres and Pluto are fitted for {0}–{1}. In other years their positions can be well off. The planets and our Moon are accurate.',
+  accAllTitle: 'Outside the accuracy range',
+  accAll: 'The model is checked for {0}–{1}. In other years the planets are approximate and the moons noticeably wrong.',
 
   navPlanets: 'Sun & planets',
   navDwarfs: 'Dwarf planets',

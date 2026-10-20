@@ -198,9 +198,9 @@ export function latLonToLocal(lat: number, lon: number, out = new THREE.Vector3(
 }
 
 export function localToLatLon(v: THREE.Vector3) {
-  const n = v.clone().normalize();
-  const lat = 90 - Math.acos(THREE.MathUtils.clamp(n.y, -1, 1)) / DEG;
-  let lon = Math.atan2(n.z, -n.x) / DEG - 180;
+  const len = v.length() || 1;
+  const lat = 90 - Math.acos(THREE.MathUtils.clamp(v.y / len, -1, 1)) / DEG;
+  let lon = Math.atan2(v.z, -v.x) / DEG - 180;
   if (lon < -180) lon += 360;
   return { lat, lon };
 }

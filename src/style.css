@@ -545,9 +545,36 @@ kbd {
 .moon-grid b { font-size: var(--fs-md); font-weight: 500; }
 .moon-grid small { font-size: 12px; color: var(--muted); }
 
+/* ── Accuracy banner: the date is outside the checked years ──── */
+/* Notices stack under the top bar: GPU warning first, then the accuracy banner. */
+#notices {
+  position: absolute; left: 50%; top: 66px; transform: translateX(-50%); z-index: 8; width: max-content;
+  /* Centred between the side panels: never under the info panel on the right. */
+  max-width: min(560px, max(280px, calc(100vw - 2 * (clamp(300px, 26vw, 400px) + var(--edge) + 16px))));
+  display: flex; flex-direction: column; align-items: center; gap: var(--s2); pointer-events: none;
+}
+#notices > * { pointer-events: auto; }
+#accuracy {
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 14px; align-items: center; padding: 8px 10px 8px 14px;
+  background: rgba(30, 18, 6, .88); border: 1px solid rgba(255, 179, 71, .45); border-left-width: 2px;
+  color: #ffe2b8; font-size: 12.5px; line-height: 1.45; animation: holo-in .3s ease-out both;
+}
+#accuracy[hidden] { display: none; }
+#accuracy[data-level='all'] { border-color: rgba(255, 120, 71, .7); }
+#accuracy b { color: var(--amber); font-weight: 600; font-size: var(--fs-xs); letter-spacing: var(--track-caps); text-transform: uppercase; }
+#accuracy span { grid-column: 1; color: #f2d6ae; }
+#accuracy button {
+  grid-row: 1 / span 2; grid-column: 2; padding: 6px 10px; border: 1px solid rgba(255, 179, 71, .5);
+  font-size: var(--fs-xs); letter-spacing: var(--track-caps); text-transform: uppercase; color: var(--amber);
+}
+#accuracy button:hover { background: rgba(255, 179, 71, .12); color: #ffe2b8; }
+#date-btn.inexact #sim-date { color: var(--amber); }
+@media (max-width: 860px) {
+  #notices { top: 104px; max-width: calc(100vw - 32px); }
+}
+
 /* ── Software-rendering warning ──────────────────────────────── */
 #gpu-warning {
-  position: absolute; left: 50%; top: 72px; transform: translateX(-50%); z-index: 8; max-width: min(560px, calc(100vw - 32px));
   display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 12px 14px;
   background: rgba(40, 22, 6, .95); border: 1px solid rgba(255, 179, 71, .6); color: #ffe2b8; font-size: 13px; line-height: 1.5;
 }

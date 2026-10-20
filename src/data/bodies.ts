@@ -18,6 +18,8 @@ export type BodyGroup = 'star' | 'planet' | 'moon' | 'dwarf';
 export interface BodyDef {
   id: string;
   name: string;
+  /** Russian genitive of the name ("до Марса"), for bodies with moons. Defaults to `name`. */
+  genitive?: string;
   latin: string;
   kind: string;
   group: BodyGroup;
@@ -255,6 +257,7 @@ const CORE: BodyDef[] = [
   {
     id: 'earth',
     name: 'Земля',
+    genitive: 'Земли',
     latin: 'Terra',
     kind: 'Планета земной группы',
     group: 'planet',
@@ -465,6 +468,7 @@ const CORE: BodyDef[] = [
   {
     id: 'mars',
     name: 'Марс',
+    genitive: 'Марса',
     latin: 'Mars',
     kind: 'Планета земной группы',
     group: 'planet',
@@ -579,6 +583,7 @@ const CORE: BodyDef[] = [
   {
     id: 'jupiter',
     name: 'Юпитер',
+    genitive: 'Юпитера',
     latin: 'Jupiter',
     kind: 'Газовый гигант',
     group: 'planet',
@@ -659,6 +664,7 @@ const CORE: BodyDef[] = [
   {
     id: 'saturn',
     name: 'Сатурн',
+    genitive: 'Сатурна',
     latin: 'Saturn',
     kind: 'Газовый гигант',
     group: 'planet',
@@ -741,6 +747,7 @@ const CORE: BodyDef[] = [
   {
     id: 'uranus',
     name: 'Уран',
+    genitive: 'Урана',
     latin: 'Uranus',
     kind: 'Ледяной гигант',
     group: 'planet',
@@ -797,6 +804,7 @@ const CORE: BodyDef[] = [
   {
     id: 'neptune',
     name: 'Нептун',
+    genitive: 'Нептуна',
     latin: 'Neptune',
     kind: 'Ледяной гигант',
     group: 'planet',

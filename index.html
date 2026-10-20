@@ -74,10 +74,15 @@
       <section id="panel"></section>
 
       <footer id="hint"></footer>
-      <div id="gpu-warning" hidden>
-        <b data-i18n="gpuTitle">Браузер рисует без видеокарты</b>
-        <span data-i18n="gpuText">Включите аппаратное ускорение: chrome://settings/system → «Использовать графическое ускорение», затем перезапустите браузер.</span>
-        <button data-i18n-aria="close" onclick="this.parentElement.hidden = true">✕</button>
+      <div id="notices">
+        <div id="gpu-warning" hidden>
+          <b data-i18n="gpuTitle">Браузер рисует без видеокарты</b>
+          <span data-i18n="gpuText">Включите аппаратное ускорение: chrome://settings/system → «Использовать графическое ускорение», затем перезапустите браузер.</span>
+          <button data-i18n-aria="close" onclick="this.parentElement.hidden = true">✕</button>
+        </div>
+        <div id="accuracy" role="status" hidden>
+          <b></b><span></span><button id="btn-acc-now" data-i18n="now">Сейчас</button>
+        </div>
       </div>
       <button id="btn-credits" class="note" data-i18n="credits">Источники и лицензии</button>
     </div>

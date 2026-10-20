@@ -1,20 +1,22 @@
 // Generated from JPL Horizons (ecliptic J2000 frame). Moons: planetocentric, km;
 // dwarf planets: heliocentric, AU. Angles in degrees, rates in degrees/day.
 // Epoch 2026-10-19; mean rates fitted against 2025-09-14.
+// The 400-day baseline lost whole turns for the fastest moons: n of Phobos and Enceladus
+// is corrected by +360°/400 d, Mimas by +720°/400 d (checked by npm run check:astro).
 export interface MeanElementsData {
   epoch: number; a: number; e: number; i: number; node: number; peri: number; L: number;
   n: number; nodeRate: number; periRate: number;
 }
 
 export const EPHEMERIS: Record<string, MeanElementsData> = {
-  phobos: { epoch: 9787.5, a: 9379.478832, e: 0.01525079537, i: 25.63539577, node: 82.70618472, peri: 8.716103197, L: 66.16457065, n: 1127.944885, nodeRate: -0.0001340430241, periRate: 0.436033528 },
+  phobos: { epoch: 9787.5, a: 9379.478832, e: 0.01525079537, i: 25.63539577, node: 82.70618472, peri: 8.716103197, L: 66.16457065, n: 1128.844885, nodeRate: -0.0001340430241, periRate: 0.436033528 },
   deimos: { epoch: 9787.5, a: 23458.2893, e: 0.0002546945192, i: 24.11921722, node: 81.55658795, peri: 135.5221154, L: 242.517671, n: 285.1617952, nodeRate: 0.001301107506, periRate: 0 },
   io: { epoch: 9787.5, a: 422019.8376, e: 0.003775044547, i: 2.228377705, node: 338.3993694, peri: 15.48697719, L: 146.3579376, n: 203.4889539, nodeRate: -6.701817789e-05, periRate: 0.1687790193 },
   europa: { epoch: 9787.5, a: 671229.3257, e: 0.009411685182, i: 2.0749295, node: 326.2055177, peri: 190.6461908, L: 257.7673215, n: 101.3744601, nodeRate: 0.0008586905902, periRate: 0.17186703 },
   ganymede: { epoch: 9787.5, a: 1070788.685, e: 0.002541560317, i: 2.343556916, node: 339.0635072, peri: 336.1941788, L: 223.6018324, n: 50.31768168, nodeRate: -0.0006123188666, periRate: 0.02791468569 },
   callisto: { epoch: 9787.5, a: 1883670.718, e: 0.00687282825, i: 1.952493901, node: 336.7490005, peri: 8.556768679, L: 246.0285185, n: 21.57103772, nodeRate: 0.0001161533101, periRate: -0.001870206864 },
-  mimas: { epoch: 9787.5, a: 186025.7619, e: 0.02078209907, i: 28.60938077, node: 172.6363367, peri: 358.1930419, L: 59.09771231, n: 380.1953093, nodeRate: -0.0002130542232, periRate: 0.1317730139 },
-  enceladus: { epoch: 9787.5, a: 238413.3821, e: 0.005816570704, i: 28.04360718, node: 169.5315676, peri: 356.7870364, L: 319.8994631, n: 261.8310868, nodeRate: 2.161311799e-05, periRate: 0.2598742818 },
+  mimas: { epoch: 9787.5, a: 186025.7619, e: 0.02078209907, i: 28.60938077, node: 172.6363367, peri: 358.1930419, L: 59.09771231, n: 381.9953093, nodeRate: -0.0002130542232, periRate: 0.1317730139 },
+  enceladus: { epoch: 9787.5, a: 238413.3821, e: 0.005816570704, i: 28.04360718, node: 169.5315676, peri: 356.7870364, L: 319.8994631, n: 262.7310868, nodeRate: 2.161311799e-05, periRate: 0.2598742818 },
   tethys: { epoch: 9787.5, a: 294974.3938, e: 0.001162750731, i: 28.19498375, node: 171.8189357, peri: 179.2295124, L: 176.0722571, n: 190.6983406, nodeRate: 0.00394142887, periRate: 0 },
   dione: { epoch: 9787.5, a: 377642.3741, e: 0.002118413864, i: 28.02572073, node: 169.5503547, peri: 69.03384808, L: 344.6450015, n: 131.5350118, nodeRate: 6.910943759e-05, periRate: 0.0815148728 },
   rhea: { epoch: 9787.5, a: 527229.0904, e: 0.001149636295, i: 28.27501739, node: 169.9662029, peri: 352.1513218, L: 28.12163399, n: 79.69002876, nodeRate: -0.0002284414616, periRate: 0 },

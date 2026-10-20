@@ -464,7 +464,7 @@ export const DWARFS: BodyDef[] = [
     ],
   },
   {
-    id: 'pluto', name: 'Плутон', latin: 'Pluto', kind: 'Карликовая планета · пояс Койпера', group: 'dwarf',
+    id: 'pluto', name: 'Плутон', genitive: 'Плутона', latin: 'Pluto', kind: 'Карликовая планета · пояс Койпера', group: 'dwarf',
     radiusKm: 1188.3, orbit: mean('pluto'), pole: { ra: 132.993, dec: -6.163 }, W0: 302.695, Wdot: 56.3625225,
     texture: 'moons/pluto.jpg', color: '#d8b8a0',
     note: 'New Horizons детально снял только одно полушарие (с «сердцем»). Противоположное видно в низком разрешении, а южная полярная область, бывшая в полярной ночи, заполнена условно.',

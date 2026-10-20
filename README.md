@@ -57,8 +57,11 @@ it is in Gale crater, where the Curiosity rover is working.
 | Axes and rotation | IAU WGCCRE: precessing poles, prime meridians |
 | Surface maps | NASA, JPL, USGS and images from Voyager, Galileo, Cassini, MESSENGER, Dawn, New Horizons |
 
-Checked against JPL Horizons: direction errors for the planets are hundredths of a degree,
-about 0.01° for the Moon, and under 0.2° for moons a year after the element epoch.
+Checked against JPL Horizons (`npm run check:astro`, 204 reference positions): over
+1800–2050 the planets are within 0.2° (mostly hundredths of a degree), the Moon within 0.03°.
+Moons, Ceres and Pluto use elements fitted at the 2026 epoch and are checked for 2021–2031:
+most stay within 1°; resonant Mimas, Tethys and Miranda drift by up to 4–5°. Outside these
+years the app shows a banner saying the positions are approximate.
 
 **Scale.** There are two modes. In the illustrative mode (the default) body sizes and
 distances are compressed by power laws — otherwise the planets would be invisible dots —
@@ -80,6 +83,8 @@ npm run dev            # http://localhost:5173
 npm run build          # type check and static build into dist/
 npm run preview        # serve the build at http://localhost:4173
 npm run check:layout   # verify orbits and moon systems
+npm run check:astro    # compare positions with JPL Horizons reference data
+npm run fetch:horizons # re-download that reference data (needs network)
 ```
 
 In VS Code: `Ctrl+Shift+B` starts the dev server, `F5` starts it and opens Chrome with the
