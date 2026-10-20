@@ -66,6 +66,9 @@ export class CameraDirector {
     this.baseFov = camera.fov;
   }
 
+  /** Called when a flight starts (duration in seconds) — used for the flight sound. */
+  onFlight?: (duration: number) => void;
+
   get flying() {
     return this.flight !== null;
   }
@@ -106,6 +109,7 @@ export class CameraDirector {
     };
     this.anchor = null;
     this.controls.enabled = false;
+    this.onFlight?.(this.flight.duration);
   }
 
   update(dt: number) {

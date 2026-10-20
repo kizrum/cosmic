@@ -6,6 +6,8 @@ import { bodyByIdL, bodyL, creditsL, noticesL, regionL, regionsL, scienceL } fro
 import { EN_TIME } from '../data/en/misc';
 import { fmtNum, lang, locale, setLang, t, type Lang } from '../i18n';
 import { featureChips, statTiles, structureView } from './scienceViews';
+import * as sound from './sound';
+import { setSound, soundOn } from './sound';
 
 export const TIME_PRESETS: { label: string; title: string; days: number }[] = [
   { label: '❚❚', title: 'Пауза', days: 0 },
@@ -71,7 +73,7 @@ export interface UIHandlers {
   resetNow(): void;
   toggleLight(): void;
   toggleOrbits(): void;
-  toggleScale(): void;
+  setScale(real: boolean): void;
 }
 
 export class UI {
@@ -101,7 +103,21 @@ export class UI {
     this.buildCredits();
     $('#btn-light').addEventListener('click', () => h.toggleLight());
     $('#btn-orbits').addEventListener('click', () => h.toggleOrbits());
-    $('#btn-scale').addEventListener('click', () => h.toggleScale());
+    document.querySelectorAll<HTMLElement>('[data-scale]').forEach((b) =>
+      b.addEventListener('click', () => h.setScale(b.dataset.scale === '1')),
+    );
+    this.buildSettings();
+    $('#btn-sound').addEventListener('click', () => this.toggleSound());
+    this.setToggle('sound', soundOn);
+    // Interface sounds: a tick on hover over interactive items, a blip on presses.
+    const hud = document.querySelector('#hud')!;
+    hud.addEventListener('pointerover', (e) => {
+      const el = (e.target as HTMLElement).closest('button');
+      if (el && !el.contains((e as PointerEvent).relatedTarget as Node)) sound.tick();
+    });
+    document.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('button, .body-label')) sound.select();
+    }, true);
     document.querySelectorAll<HTMLElement>('[data-lang]').forEach((b) =>
       b.addEventListener('click', () => setLang(b.dataset.lang as Lang)),
     );
@@ -165,9 +181,9 @@ export class UI {
     const planets = BODIES.filter((b) => b.group === 'star' || b.group === 'planet');
     const dwarfs = BODIES.filter((b) => b.group === 'dwarf');
     $('#nav-groups').innerHTML = `
-      <h4>${t('navPlanets')}</h4><ul class="nav-list">${planets.map(item).join('')}</ul>
-      <h4>${t('navDwarfs')}</h4><ul class="nav-list">${dwarfs.map(item).join('')}</ul>
-      <h4>${t('navBelts')}</h4><ul class="nav-list">${regionsL()
+      <h4 data-type="planet">${t('navPlanets')}</h4><ul class="nav-list">${planets.map(item).join('')}</ul>
+      <h4 data-type="dwarf">${t('navDwarfs')}</h4><ul class="nav-list">${dwarfs.map(item).join('')}</ul>
+      <h4 data-type="region">${t('navBelts')}</h4><ul class="nav-list">${regionsL()
         .map((r) => `<li><button data-region="${r.id}" style="--c:${r.color}"><span class="dot ring"></span><span class="n">${r.name}</span>${latin(r.name, r.latin)}</button></li>`)
         .join('')}</ul>`;
     if (this.activeRegion) this.setActiveRegion(this.activeRegion);
@@ -201,6 +217,39 @@ export class UI {
     dialog.addEventListener('click', (e) => {
       if (e.target === dialog) dialog.close();
     });
+  }
+
+  /** Settings popover: display switches, language, shortcuts, sources. */
+  private buildSettings() {
+    const pop = $('#settings');
+    const btn = $('#btn-settings');
+    const setOpen = (open: boolean) => {
+      pop.hidden = !open;
+      btn.setAttribute('aria-expanded', String(open));
+      btn.classList.toggle('on', open);
+      if (open) $('#date-pop').hidden = true;
+    };
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setOpen(pop.hidden !== false);
+    });
+    document.addEventListener('pointerdown', (e) => {
+      if (!pop.hidden && !(e.target as HTMLElement).closest('#settings, #btn-settings')) setOpen(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !pop.hidden) {
+        setOpen(false);
+        e.stopImmediatePropagation();
+      }
+    }, true);
+    $('#btn-credits-2').addEventListener('click', () => {
+      setOpen(false);
+      $<HTMLDialogElement>('#credits').showModal();
+    });
+  }
+
+  get settingsOpen() {
+    return !$('#settings').hidden;
   }
 
   private renderCredits() {
@@ -237,6 +286,12 @@ export class UI {
     const setPop = (open: boolean) => {
       pop.hidden = !open;
       btn.setAttribute('aria-expanded', String(open));
+      if (open) {
+        // Only one popover at a time.
+        $('#settings').hidden = true;
+        $('#btn-settings').classList.remove('on');
+        $('#btn-settings').setAttribute('aria-expanded', 'false');
+      }
     };
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -281,8 +336,19 @@ export class UI {
     $('#date-btn').classList.toggle('is-live', live);
   }
 
-  setToggle(id: 'light' | 'orbits' | 'scale', on: boolean) {
-    $(`#btn-${id}`).classList.toggle('on', on);
+  toggleSound() {
+    setSound(!soundOn);
+    this.setToggle('sound', soundOn);
+  }
+
+  setToggle(id: 'light' | 'orbits' | 'scale' | 'sound', on: boolean) {
+    if (id === 'scale') {
+      document.querySelectorAll<HTMLElement>('[data-scale]').forEach((b) => b.classList.toggle('on', (b.dataset.scale === '1') === on));
+      return;
+    }
+    const el = $(`#btn-${id}`);
+    el.classList.toggle('on', on);
+    el.setAttribute('aria-checked', String(on));
   }
 
   setDate(d: Date) {
@@ -327,7 +393,9 @@ export class UI {
    * Panel layout: an always-visible header (title + live data) and tabbed details that can
    * be collapsed. The collapsed state is remembered per viewer.
    */
-  private open(spec: { header: string; status?: string; tabs: PanelTab[]; back?: string }, animate = true) {
+  /** `type` colours the card: star, planet, moon, dwarf (planet) or region (belt). */
+  private open(spec: { type: string; header: string; status?: string; tabs: PanelTab[]; back?: string }, animate = true) {
+    this.panel.dataset.type = spec.type;
     const tabs = spec.tabs.filter((tb) => tb.html.trim());
     const active = tabs.find((tb) => tb.id === this.lastTab) ?? tabs[0];
     const bar = tabs.length > 1
@@ -395,6 +463,7 @@ export class UI {
     this.crumbs.innerHTML = `<button data-crumb="system">${t('system')}</button><span class="sep">›</span><span class="cur">${r.name}</span>`;
     this.setActiveRegion(r.id);
     this.open({
+      type: 'region',
       header: `<div class="kind" style="--c:${r.color}">${esc(r.kind)}</div>${title(r.name, r.latin)}`,
       tabs: [
         { id: 'overview', label: t('tabOverview'), html: `<p class="desc">${esc(r.description)}</p>` },
@@ -440,6 +509,7 @@ export class UI {
       ? `<p class="tip">${t('sunNoSites')}</p>`
       : `${legend}${siteList}<p class="tip">${b.sites.length ? t('sitesTip') : ''}${t('scanTip')}</p>`;
     this.open({
+      type: b.group,
       header: `<div class="kind" style="--c:${b.color}">${esc(b.kind)}</div>${title(b.name, b.latin)}`,
       tabs: [
         {
@@ -461,6 +531,7 @@ export class UI {
     this.setCrumbs(b, s.name);
     const coord = s.elevation ? `${fmtNum(b.radiusKm * s.elevation, { maximumFractionDigits: 0 })} ${t('ringPlane')}` : formatLatLon(s.lat, s.lon);
     this.open({
+      type: b.group,
       header: `<div class="kind" style="--c:${b.color}">${esc(s.kind)}</div><h2>${esc(s.name)}</h2><div class="coord">${b.name} · ${coord}</div>`,
       status: animate ? `<div class="scan"><span></span>${t('scanSite')}</div>` : '',
       tabs: [{ id: 'overview', label: t('tabOverview'), html: `<p class="desc">${esc(s.description)}</p>${factsTable(s.facts ?? [])}` }],
@@ -478,6 +549,7 @@ export class UI {
           <em>${fmtNum(Math.round(p.nearest.km))} ${t('alongSurface')}</em></button>`
       : '';
     this.open({
+      type: b.group,
       header: `<div class="kind" style="--c:${b.color}">${t('unexplored')}</div><h2>${formatLatLon(p.lat, p.lon)}</h2><div class="coord">${b.name}</div>`,
       status: animate ? `<div class="scan"><span></span>${t('scanSector')}</div>` : '',
       tabs: [{ id: 'overview', label: t('tabOverview'), html: near }],
@@ -491,12 +563,29 @@ export class UI {
     if (el) el.innerHTML = factsTable(stats);
   }
 
+  private hintTimer = 0;
+
+  /** Show a hint; it fades out after a while (it is only needed the first time round). */
   hint(text: string) {
-    $('#hint').textContent = text;
+    const el = $('#hint');
+    if (el.textContent === text && el.classList.contains('show')) return;
+    el.textContent = text;
+    el.classList.add('show');
+    clearTimeout(this.hintTimer);
+    this.hintTimer = window.setTimeout(() => el.classList.remove('show'), 7000);
   }
 
   loading(progress: number) {
-    $('#loader-bar').style.width = `${Math.round(progress * 100)}%`;
+    const pct = Math.round(progress * 100);
+    $('#loader-bar').style.width = `${pct}%`;
+    $('#loader-pct').textContent = `${pct} %`;
+    // Boot steps tick off as the load progresses.
+    const steps = document.querySelectorAll<HTMLElement>('#boot li');
+    steps.forEach((li, i) => {
+      const at = (i + 1) / steps.length;
+      li.classList.toggle('ok', progress >= at);
+      li.classList.toggle('run', progress < at && progress >= i / steps.length);
+    });
   }
 
   ready() {

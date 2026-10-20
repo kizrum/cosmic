@@ -17,9 +17,6 @@
       <header class="topbar">
         <div class="brand"><span class="logo"></span>COSMIC<em data-i18n="subtitle">Навигационная карта</em></div>
         <nav id="crumbs"></nav>
-        <div class="lang" data-i18n-title="langTitle">
-          <button data-lang="ru">RU</button><button data-lang="en">EN</button>
-        </div>
         <div class="time">
           <button id="btn-play" data-i18n-title="playTitle" aria-label="Пауза"><i></i></button>
           <div class="speed" data-i18n-title="speedTitle">
@@ -35,16 +32,37 @@
             <button id="btn-now" data-i18n="now">Сейчас</button>
           </div>
         </div>
+        <button id="btn-settings" class="icon-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="settings" data-i18n-title="settingsTitle" data-i18n-aria="settingsTitle"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.4h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg></button>
+        <div id="settings" hidden>
+          <h4 data-i18n="settingsDisplay">Отображение</h4>
+          <button class="switch" id="btn-orbits" role="switch"><span data-i18n="orbitsLabel">Орбиты и оси</span><kbd>O</kbd><i></i></button>
+          <button class="switch" id="btn-light" role="switch"><span data-i18n="lightLabel">Подсветка ночной стороны</span><kbd>L</kbd><i></i></button>
+          <button class="switch" id="btn-sound" role="switch"><span data-i18n="soundLabel">Звуки интерфейса</span><kbd>S</kbd><i></i></button>
+          <h4 data-i18n="langTitle">Язык интерфейса</h4>
+          <div class="seg lang"><button data-lang="ru">Русский</button><button data-lang="en">English</button></div>
+          <h4 data-i18n="shortcuts">Горячие клавиши</h4>
+          <dl class="keys">
+            <div><dt><kbd>Esc</kbd></dt><dd data-i18n="keyBack">Назад на уровень выше</dd></div>
+            <div><dt><kbd>Space</kbd></dt><dd data-i18n="keyPause">Пауза / продолжить</dd></div>
+            <div><dt><kbd>,</kbd> <kbd>.</kbd></dt><dd data-i18n="keySpeed">Медленнее / быстрее</dd></div>
+            <div><dt><kbd>M</kbd></dt><dd data-i18n="keyScale">Наглядный / реальный масштаб</dd></div>
+            <div><dt><kbd>I</kbd></dt><dd data-i18n="keyPanel">Свернуть / развернуть панель</dd></div>
+          </dl>
+          <button class="link" id="btn-credits-2" data-i18n="creditsTitle">Источники и лицензии</button>
+        </div>
       </header>
 
       <div class="toolbar">
         <button id="nav-toggle" aria-expanded="false" aria-controls="nav" data-i18n-title="objectsTitle">
           <span class="bars"><i></i><i></i><i></i></span><span data-i18n="objects">Объекты</span>
         </button>
-        <div class="toggles">
-          <button id="btn-orbits" data-i18n-title="orbitsTitle" data-i18n="orbits">Орбиты</button>
-          <button id="btn-light" data-i18n-title="lightTitle" data-i18n="light">Подсветка</button>
-          <button id="btn-scale" data-i18n-title="scaleTitle" data-i18n="scale">Реальный масштаб</button>
+      </div>
+
+      <div class="scale-switch" data-i18n-title="scaleTitle">
+        <span class="caps" data-i18n="scaleLabel">Масштаб</span>
+        <div class="seg">
+          <button data-scale="0" data-i18n="scaleIllustrative">Наглядный</button>
+          <button data-scale="1" data-i18n="scaleTrue">Реальный</button>
         </div>
       </div>
       <aside id="nav">
@@ -67,9 +85,17 @@
 
     <div id="loader">
       <div class="loader-inner">
+        <div class="loader-ring"></div>
         <div class="loader-title">COSMIC</div>
-        <div class="loader-sub" data-i18n="loading">Загрузка карт поверхностей…</div>
+        <div class="loader-sub" data-i18n="loading">Инициализация навигационной системы</div>
+        <ul class="boot" id="boot">
+          <li data-i18n="boot1">Загрузка эфемерид JPL</li>
+          <li data-i18n="boot2">Расчёт орбит на текущую дату</li>
+          <li data-i18n="boot3">Загрузка карт поверхностей</li>
+          <li data-i18n="boot4">Калибровка навигации</li>
+        </ul>
         <div class="loader-track"><div id="loader-bar"></div></div>
+        <div class="loader-pct" id="loader-pct">0 %</div>
       </div>
     </div>
 

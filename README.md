@@ -91,9 +91,12 @@ debugger attached. Other tasks are under “Tasks: Run Task”.
 - Click a surface to scan that spot; click inside an outlined site to open it.
 - Scroll to zoom, drag to orbit the camera.
 - `Esc` — go back a level, `Space` — pause, `,` and `.` — slower and faster.
-- `M` — true scale, `L` — fill light on the night side, `I` — collapse or expand the panel.
+- The “Scale” switch at the bottom left (or `M`) toggles illustrative and true scale.
 - Click the date at the top to pick any date (UTC); “Now” returns to the present.
-- The RU / EN switch at the top changes the language of the interface and all descriptions.
+- The gear button opens the settings: orbits and axes (`O`), fill light on the night side
+  (`L`), interface sounds (`S`), language (Russian / English), the list of shortcuts and the
+  sources & licences.
+- `I` collapses or expands the info panel.
 
 ## Licence
 

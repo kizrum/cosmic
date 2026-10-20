@@ -14,6 +14,7 @@ import { SolarSystem, type Body } from './scene/SolarSystem';
 import { AsteroidBelt, KuiperBelt, createSky } from './scene/Environment';
 import { CameraDirector } from './CameraDirector';
 import { TIME_PRESETS, UI, type LiveStat } from './ui/UI';
+import * as sound from './ui/sound';
 import type { Site } from './data/bodies';
 import { REGIONS, type RegionDef } from './data/regions';
 import { categoryOf, shapeOf } from './data/siteShapes';
@@ -81,6 +82,7 @@ const ambient = new THREE.AmbientLight(0xb8c8ff, 0.05);
 scene.add(ambient);
 
 const director = new CameraDirector(camera, controls);
+director.onFlight = (duration) => sound.whoosh(duration);
 
 type Mode = 'system' | 'region' | 'body' | 'site';
 let mode: Mode = 'system';
@@ -122,7 +124,7 @@ const ui = new UI({
     lightAuto = false;
     ui.setToggle('light', lightBoost);
   },
-  toggleScale: () => setScaleMode(scale.target === 0),
+  setScale: (real) => setScaleMode(real),
   toggleOrbits: () => {
     showOrbits = !showOrbits;
     ui.setToggle('orbits', showOrbits);
@@ -130,6 +132,8 @@ const ui = new UI({
 });
 ui.setSpeedIndex(speedIndex);
 ui.setToggle('orbits', showOrbits);
+ui.setToggle('light', lightBoost);
+ui.setToggle('scale', false);
 
 // Any click on the map (labels and markers included) hides the object list.
 document.querySelector('#labels')!.addEventListener('click', () => ui.setNavOpen(false), { capture: true });
@@ -375,6 +379,7 @@ function focusSite(b: Body, s: Site) {
   ui.showSite(b.def, s);
   ui.hint(t('hintSite'));
   surfaceView(b, b.siteAnchors.get(s.id)!, s.elevation ? 0.9 : 0.42);
+  sound.scan();
   if (!s.elevation) autoLight(b, s);
 }
 
@@ -413,6 +418,7 @@ function scanPoint(b: Body, worldPoint: THREE.Vector3) {
   ui.showPoint(b.def, { lat, lon, nearest, status: localConditions(b, { lat, lon }) });
   ui.hint(t('hintBack'));
   surfaceView(b, probe, 0.42);
+  sound.scan();
   autoLight(b, { lat, lon });
 }
 
@@ -682,6 +688,11 @@ window.addEventListener('keydown', (e) => {
     ui.setToggle('light', lightBoost);
   } else if (e.key === 'm' || e.key === 'M' || e.key === 'ь' || e.key === 'Ь') {
     setScaleMode(scale.target === 0);
+  } else if (e.key === 'o' || e.key === 'O' || e.key === 'щ' || e.key === 'Щ') {
+    showOrbits = !showOrbits;
+    ui.setToggle('orbits', showOrbits);
+  } else if (e.key === 's' || e.key === 'S' || e.key === 'ы' || e.key === 'Ы') {
+    ui.toggleSound();
   } else if (e.key === 'i' || e.key === 'I' || e.key === 'ш' || e.key === 'Ш') {
     ui.toggleCollapsed();
   } else if (e.key === ' ') {
@@ -909,6 +920,7 @@ applyStatic();
 applyLanguage();
 onLangChange(applyLanguage);
 
+ui.loading(0);
 manager.onProgress = (_url, loaded, total) => ui.loading(loaded / total);
 manager.onLoad = () => {
   ui.ready();
