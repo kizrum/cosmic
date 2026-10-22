@@ -116,6 +116,15 @@ export class CameraDirector {
     return this.flight !== null;
   }
 
+  /** Drop any flight and anchor without touching the controls (the view is being left). */
+  halt() {
+    this.flight = null;
+    this.anchor = null;
+    this.avoid = undefined;
+    this.camera.fov = this.baseFov;
+    this.camera.updateProjectionMatrix();
+  }
+
   flyTo(opts: FlightOptions) {
     // Flush any leftover drag inertia now, so it cannot kick in when the flight ends.
     const damping = this.controls.dampingFactor;

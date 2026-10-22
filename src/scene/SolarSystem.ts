@@ -3,6 +3,7 @@ import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import type { SiteOutline } from './SiteOutlines';
 import { SUN_RADIUS, layoutMoons, moonDistance, visualRadius } from './layout';
 import { EARTH_KM, blend, helioDistance, scale } from './scale';
+import { sphereNeed, type TextureStreamer } from './textures';
 import { BODIES, type BodyDef, type Site } from '../data/bodies';
 import {
   DEG, type Kepler, basisFromPole, elementsAt, equToScene, keplerPosition, latLonToLocal, moonPosition, orbitNormal,
@@ -261,16 +262,21 @@ function fadeNearCamera(material: THREE.LineBasicMaterial, moon: Body) {
   };
 }
 
+/** Under an opaque haze the surface map streams separately: it matters only in surface view. */
+const surfaceGroup = (id: string) => (HAZE[id] ? `${id}:surface` : id);
+const streamPos = new THREE.Vector3();
+const streamSphere = new THREE.Sphere();
+const frustum = new THREE.Frustum();
+const viewProj = new THREE.Matrix4();
+
 export class SolarSystem {
   readonly group = new THREE.Group();
   readonly bodies: Body[] = [];
+  /** Materials that flip to back faces at runtime (atmospheres seen from inside). */
+  private readonly sideSwitching: THREE.Material[] = [];
   private corona!: THREE.Mesh;
-  private readonly loader: THREE.TextureLoader;
-  private readonly anisotropy: number;
 
-  constructor(manager: THREE.LoadingManager, anisotropy: number, d: number) {
-    this.loader = new THREE.TextureLoader(manager);
-    this.anisotropy = anisotropy;
+  constructor(private readonly textures: TextureStreamer, d: number) {
     for (const def of BODIES) this.bodies.push(this.build(def));
     for (const b of this.bodies) {
       b.parent = b.def.parent ? this.get(b.def.parent) : this.get('sun');
@@ -296,11 +302,9 @@ export class SolarSystem {
     return this.bodies.find((b) => b.def.id === id)!;
   }
 
-  private tex(name: string, srgb = true) {
-    const t = this.loader.load(`textures/${name}`);
-    t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
-    t.anisotropy = this.anisotropy;
-    return t;
+  /** Streamed map whose detail follows how large `body` is on screen. */
+  private tex(name: string, body: string, srgb = true) {
+    return this.textures.get(name, body, srgb);
   }
 
   private build(def: BodyDef) {
@@ -311,16 +315,16 @@ export class SolarSystem {
     let material: THREE.Material;
 
     if (def.id === 'sun') {
-      const u = { uMap: { value: this.tex('sun.jpg') }, uTime: { value: 0 } };
+      const u = { uMap: { value: this.tex('sun.jpg', def.id) }, uTime: { value: 0 } };
       body.uniforms.push(u);
       material = new THREE.ShaderMaterial({ vertexShader: worldVertex, fragmentShader: sunFragment, uniforms: u });
       this.buildCorona(body);
     } else if (def.id === 'earth') {
-      const clouds = this.tex('earth_clouds.jpg', false);
+      const clouds = this.tex('earth_clouds.jpg', def.id, false);
       const u = {
-        uDay: { value: this.tex('earth_day.jpg') },
-        uNight: { value: this.tex('earth_night.jpg') },
-        uSpec: { value: this.tex('earth_specular.jpg', false) },
+        uDay: { value: this.tex('earth_day.jpg', def.id) },
+        uNight: { value: this.tex('earth_night.jpg', def.id) },
+        uSpec: { value: this.tex('earth_specular.jpg', def.id, false) },
         uClouds: { value: clouds },
         uSunPos: { value: SUN_POS },
         uCloudShift: { value: 0 },
@@ -334,7 +338,7 @@ export class SolarSystem {
         new THREE.MeshStandardMaterial({ color: 0xdfe6ee, alphaMap: clouds, transparent: true, depthWrite: false, roughness: 1, opacity: 1 }),
       );
     } else {
-      const map = this.tex(def.texture!);
+      const map = this.tex(def.texture!, surfaceGroup(def.id));
       const gaseous = ['jupiter', 'saturn', 'uranus', 'neptune', 'venus'].includes(def.id);
       const mat = new THREE.MeshStandardMaterial({ map, roughness: 1, metalness: 0 });
       // Solid surfaces: derive relief shading from the albedo map.
@@ -353,7 +357,7 @@ export class SolarSystem {
       body.clouds = new THREE.Mesh(
         new THREE.SphereGeometry(r * haze.scale, 128, 64),
         new THREE.MeshStandardMaterial({
-          map: haze.texture ? this.tex(haze.texture) : null,
+          map: haze.texture ? this.tex(haze.texture, def.id) : null,
           color: haze.color ?? 0xffffff, transparent: true, roughness: 1, opacity: 1,
         }),
       );
@@ -408,6 +412,7 @@ export class SolarSystem {
     mesh.renderOrder = 2;
     body.tilt.add(mesh);
     // When the camera dips inside the shell, render back faces so the sky stays visible.
+    this.sideSwitching.push(mesh.material as THREE.Material);
     mesh.onBeforeRender = () => {
       const inside = u.uCenter.value.length() < u.uRa.value; // uCenter is in view space
       (mesh.material as THREE.ShaderMaterial).side = inside ? THREE.BackSide : THREE.FrontSide;
@@ -418,7 +423,7 @@ export class SolarSystem {
     // Ring radii in Saturn equatorial radii: C ring inner edge → A ring outer edge.
     const inner = body.baseRadius * 1.239;
     const outer = body.baseRadius * 2.27;
-    const map = this.tex('saturn_ring.png');
+    const map = this.tex('saturn_ring.png', body.def.id);
     const u = {
       uMap: { value: map },
       uSunPos: { value: SUN_POS },
@@ -592,6 +597,40 @@ export class SolarSystem {
         budget--;
       }
     }
+  }
+
+  /**
+   * Compile every shader up front, behind the loading screen: materials first shown near a
+   * body (orbit lines with near-camera fading, axes, site outlines, atmospheres seen from
+   * inside) would otherwise compile mid-flight and stall the first approach.
+   */
+  precompile(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera) {
+    // compileAsync resolves once the driver has finished (KHR_parallel_shader_compile):
+    // plain compile() only queues the work, and the first draw would still wait for it.
+    const front = renderer.compileAsync(scene, camera);
+    for (const m of this.sideSwitching) m.side = THREE.BackSide;
+    const back = renderer.compileAsync(scene, camera);
+    for (const m of this.sideSwitching) m.side = THREE.FrontSide;
+    return Promise.all([front, back]);
+  }
+
+  /** Tell the texture streamer how much map detail each body can show from this camera. */
+  streamTextures(camera: THREE.Camera, pxPerRad: number) {
+    frustum.setFromProjectionMatrix(viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+    for (const b of this.bodies) {
+      b.getWorldPosition(streamPos);
+      // Bodies out of view (behind the camera, say) keep their small maps.
+      const seen = frustum.intersectsSphere(streamSphere.set(streamPos, b.radius));
+      const need = seen ? sphereNeed(b.radius, camera.position.distanceTo(streamPos), pxPerRad) : 0;
+      this.textures.setNeed(b.def.id, need);
+      if (HAZE[b.def.id]) this.textures.setNeed(surfaceGroup(b.def.id), b.cloudOpacityTarget < 1 ? need : 0);
+    }
+  }
+
+  /** A flight to `b` will end `distance` from its centre: start loading the maps it needs there. */
+  expectView(b: Body, distance: number, seconds = 7) {
+    this.textures.expect(b.def.id, b.radius, distance, seconds);
+    if (HAZE[b.def.id] && b.cloudOpacityTarget < 1) this.textures.expect(surfaceGroup(b.def.id), b.radius, distance, seconds);
   }
 
   /** Fill light for custom shaders (Earth, Saturn's rings), matching the scene's ambient light. */

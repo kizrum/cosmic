@@ -18,6 +18,7 @@ export interface CreditGroup {
 
 const CC_BY_4 = 'https://creativecommons.org/licenses/by/4.0/';
 const CC_BY_SA_3 = 'https://creativecommons.org/licenses/by-sa/3.0/';
+const CC_BY_SA_4 = 'https://creativecommons.org/licenses/by-sa/4.0/';
 const NASA_PD = 'Общественное достояние (материалы NASA), используются свободно. NASA не участвует в проекте и не является его спонсором.';
 
 export const CREDITS: CreditGroup[] = [
@@ -31,7 +32,7 @@ export const CREDITS: CreditGroup[] = [
         licence: 'CC BY 4.0',
         licenceUrl: CC_BY_4,
         changes:
-          'Уменьшено разрешение (до 4096 px); у панорамы звёздного неба повышены яркость и контраст Млечного Пути; карта облаков Земли переведена в оттенки серого; карта поверхности Венеры повёрнута на 180° для совпадения с системой координат IAU; цвет Нептуна приглушён по данным Irwin et al., 2024.',
+          'Карты нарезаны на уровни детализации от 512 до 8192 px; у панорамы звёздного неба повышены яркость и контраст Млечного Пути; карта облаков Земли переведена в оттенки серого; карта поверхности Венеры повёрнута на 180° для совпадения с системой координат IAU; цвет Нептуна приглушён по данным Irwin et al., 2024; от карты колец Сатурна оставлена полоса радиального профиля.',
       },
       {
         what: 'Фобос',
@@ -68,13 +69,20 @@ export const CREDITS: CreditGroup[] = [
       { what: 'Тритон', author: 'NASA/JPL/USGS/Lunar and Planetary Institute (Voyager 2)', licence: NASA_PD },
       { what: 'Плутон, Харон', author: 'NASA/JHUAPL/SwRI (New Horizons)', licence: NASA_PD },
       { what: 'Церера', author: 'NASA/JPL-Caltech/UCLA/MPS/DLR/IDA (Dawn)', licence: NASA_PD },
+      { what: 'Вид Млечного Пути снаружи (реконструкция по данным «Спитцера», PIA10748)', author: 'NASA/JPL-Caltech/R. Hurt (SSC/Caltech)', source: 'https://images.nasa.gov/details/PIA10748', licence: NASA_PD },
     ],
   },
   {
     title: 'Данные',
     entries: [
       { what: 'Орбиты планет', author: 'E. M. Standish, JPL — «Approximate Positions of the Planets»', licence: 'Научные данные' },
-      { what: 'Орбиты спутников и карликовых планет', author: 'JPL Horizons System, NASA/JPL Solar System Dynamics', licence: 'Научные данные' },
+      { what: 'Орбиты спутников и карликовых планет, траектории «Вояджеров», «Пионеров» и «Новых горизонтов»', author: 'JPL Horizons System, NASA/JPL Solar System Dynamics', licence: 'Научные данные' },
+      {
+        what: 'Ближайшие звёзды: положения, блеск, спектры', author: 'HYG Database v4.1, David Nash', source: 'https://github.com/astronexus/HYG-Database',
+        licence: 'CC BY-SA 4.0', licenceUrl: CC_BY_SA_4,
+        changes: 'Отобраны звёзды в пределах 26 св. лет и яркие звёзды в пределах 60; координаты переведены в эклиптическую систему. Выборка (src/data/stars.ts) распространяется на тех же условиях.',
+      },
+      { what: 'Расположение Солнца и рукавов на изображении Галактики', author: 'Карта «Milky Way Arms ssc2008-10», Wikimedia Commons', source: 'https://commons.wikimedia.org/wiki/File:Milky_Way_Arms_ssc2008-10.svg', licence: 'Общественное достояние' },
       { what: 'Ориентация осей и вращение', author: 'IAU Working Group on Cartographic Coordinates and Rotational Elements', licence: 'Научные данные' },
       { what: 'Положение Луны', author: 'J. Meeus, «Astronomical Algorithms»', licence: 'Научный метод' },
     ],

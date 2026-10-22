@@ -42,8 +42,14 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 
 #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
 #scene:active { cursor: grabbing; }
-#labels { position: fixed; inset: 0; pointer-events: none; }
-#labels * { touch-action: none; }
+#labels, .label-layer { position: fixed; inset: 0; pointer-events: none; }
+#labels *, .label-layer * { touch-action: none; }
+/* Distance rings of the neighbourhood view: plain captions, not clickable. */
+.scale-ring { font-family: var(--mono); font-size: 10.5px; color: rgba(var(--accent-rgb), .55); text-shadow: 0 0 4px #000; white-space: nowrap; padding-left: 4px; }
+.body-label.star .dot { border-width: 1px; }
+.body-label.star .name { font-size: 11px; letter-spacing: .08em; font-weight: 500; }
+.body-label.probe .dot { border-radius: 2px; transform: rotate(45deg) scale(.8); }
+#crumbs .up { color: var(--dim); }
 
 /* ── Holo surface: corner brackets + scanlines (shared by panels and popovers) ── */
 .holo, #panel, #nav, #date-pop, #settings, #credits {
@@ -304,6 +310,8 @@ kbd {
 [data-type="moon"]   { --accent: #b9c3ff; --accent-rgb: 185, 195, 255; --type-ico: '◐'; }
 [data-type="dwarf"]  { --accent: #d29bff; --accent-rgb: 210, 155, 255; --type-ico: '◆'; }
 [data-type="region"] { --accent: #e6b07a; --accent-rgb: 230, 176, 122; --type-ico: '⁘'; }
+[data-type="probe"]  { --accent: #9fe8c8; --accent-rgb: 159, 232, 200; --type-ico: '✦'; }
+[data-type="galaxy"] { --accent: #b9c8ff; --accent-rgb: 185, 200, 255; --type-ico: '✺'; }
 /* Tokens derived from the accent must be re-declared where the accent changes. */
 #panel, #nav h4[data-type] {
   --line: rgba(var(--accent-rgb), .22);

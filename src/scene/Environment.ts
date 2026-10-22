@@ -1,14 +1,15 @@
 import * as THREE from 'three';
 import { DEG, equToScene } from '../astro';
 import { AU_UNITS, helioDistance, scale } from './scale';
+import type { TextureStreamer } from './textures';
 
 /**
  * Milky Way panorama in galactic coordinates, oriented with the real galactic
  * centre (RA 266.405°, Dec −28.936°) and north galactic pole (RA 192.859°, Dec 27.128°).
  */
-export function createSky(loader: THREE.TextureLoader) {
-  const tex = loader.load('textures/stars.jpg');
-  tex.colorSpace = THREE.SRGBColorSpace;
+export function createSky(textures: TextureStreamer, pxPerRad: number) {
+  // The sky sphere spans 2π radians across its map; its detail depends only on the screen.
+  const tex = textures.get('stars.jpg', 'sky', true, 2 * Math.PI * pxPerRad);
   const geo = new THREE.SphereGeometry(9000, 64, 32);
   // Seen from inside, longitude must increase to the left: mirror U.
   const uv = geo.attributes.uv as THREE.BufferAttribute;

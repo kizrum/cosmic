@@ -11,6 +11,8 @@ import { EN_PLANETS } from './en/bodies';
 import { EN_SATELLITES } from './en/satellites';
 import { EN_GAS, EN_SCIENCE } from './en/science';
 import { EN_CREDITS, EN_NOTICES, EN_REGIONS } from './en/misc';
+import { DEEP, LEVEL_NAMES, STAR_NAMES, deepById, type DeepDef, type Level } from './deep';
+import { EN_DEEP, EN_LEVEL_NAMES, EN_STAR_NAMES } from './en/deep';
 
 const EN_BODIES = { ...EN_PLANETS, ...EN_SATELLITES };
 const cache = new Map<string, unknown>();
@@ -70,5 +72,15 @@ export function regionL(r: RegionDef): RegionDef {
 }
 
 export const regionsL = () => REGIONS.map(regionL);
+
+export function deepL(id: string): DeepDef {
+  const d = deepById(id);
+  const en = lang === 'en' ? EN_DEEP[id] : undefined;
+  return en ? { ...d, ...en, note: d.note ? en.note ?? d.note : undefined } : d;
+}
+export const deepsL = () => DEEP.map((d) => deepL(d.id));
+export const levelName = (l: Level) => (lang === 'en' ? EN_LEVEL_NAMES : LEVEL_NAMES)[l];
+/** Localised name and note of a nearby star (by Gliese id), if it has one. */
+export const starInfoL = (gl: string) => (lang === 'en' ? EN_STAR_NAMES : STAR_NAMES)[gl];
 export const creditsL = (): CreditGroup[] => (lang === 'ru' ? CREDITS : EN_CREDITS);
 export const noticesL = () => (lang === 'ru' ? NOTICES : EN_NOTICES);

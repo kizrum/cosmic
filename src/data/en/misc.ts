@@ -29,6 +29,7 @@ export const EN_REGIONS: Record<string, { name: string; kind: string; descriptio
 
 const CC_BY_4 = 'https://creativecommons.org/licenses/by/4.0/';
 const CC_BY_SA_3 = 'https://creativecommons.org/licenses/by-sa/3.0/';
+const CC_BY_SA_4 = 'https://creativecommons.org/licenses/by-sa/4.0/';
 const NASA_PD = 'Public domain (NASA material). Use does not imply NASA endorsement.';
 
 export const EN_CREDITS: CreditGroup[] = [
@@ -42,7 +43,7 @@ export const EN_CREDITS: CreditGroup[] = [
         licence: 'CC BY 4.0',
         licenceUrl: CC_BY_4,
         changes:
-          'Resolution reduced (to 4096 px); Milky Way brightness and contrast raised in the star-field panorama; Earth cloud map converted to greyscale; Venus surface map rotated by 180° to match the IAU coordinate system; Neptune’s colour muted following Irwin et al., 2024.',
+          'Maps cut into detail tiers from 512 to 8192 px; Milky Way brightness and contrast raised in the star-field panorama; Earth cloud map converted to greyscale; Venus surface map rotated by 180° to match the IAU coordinate system; Neptune’s colour muted following Irwin et al., 2024; Saturn’s ring map reduced to a strip of its radial profile.',
       },
       {
         what: 'Phobos',
@@ -79,13 +80,20 @@ export const EN_CREDITS: CreditGroup[] = [
       { what: 'Triton', author: 'NASA/JPL/USGS/Lunar and Planetary Institute (Voyager 2)', licence: NASA_PD },
       { what: 'Pluto, Charon', author: 'NASA/JHUAPL/SwRI (New Horizons)', licence: NASA_PD },
       { what: 'Ceres', author: 'NASA/JPL-Caltech/UCLA/MPS/DLR/IDA (Dawn)', licence: NASA_PD },
+      { what: 'The Milky Way seen from outside (reconstruction from Spitzer data, PIA10748)', author: 'NASA/JPL-Caltech/R. Hurt (SSC/Caltech)', source: 'https://images.nasa.gov/details/PIA10748', licence: NASA_PD },
     ],
   },
   {
     title: 'Data',
     entries: [
       { what: 'Planetary orbits', author: 'E. M. Standish, JPL — “Approximate Positions of the Planets”', licence: 'Scientific data' },
-      { what: 'Orbits of moons and dwarf planets', author: 'JPL Horizons System, NASA/JPL Solar System Dynamics', licence: 'Scientific data' },
+      { what: 'Orbits of moons and dwarf planets; trajectories of the Voyagers, Pioneers and New Horizons', author: 'JPL Horizons System, NASA/JPL Solar System Dynamics', licence: 'Scientific data' },
+      {
+        what: 'Nearest stars: positions, brightness, spectra', author: 'HYG Database v4.1, David Nash', source: 'https://github.com/astronexus/HYG-Database',
+        licence: 'CC BY-SA 4.0', licenceUrl: CC_BY_SA_4,
+        changes: 'Selected the stars within 26 ly and bright stars within 60 ly; coordinates converted to the ecliptic frame. The selection (src/data/stars.ts) is distributed under the same terms.',
+      },
+      { what: 'Position of the Sun and the arms on the Galaxy image', author: '“Milky Way Arms ssc2008-10” map, Wikimedia Commons', source: 'https://commons.wikimedia.org/wiki/File:Milky_Way_Arms_ssc2008-10.svg', licence: 'Public domain' },
       { what: 'Axis orientation and rotation', author: 'IAU Working Group on Cartographic Coordinates and Rotational Elements', licence: 'Scientific data' },
       { what: 'Position of the Moon', author: 'J. Meeus, “Astronomical Algorithms”', licence: 'Scientific method' },
     ],

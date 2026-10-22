@@ -71,7 +71,13 @@ export class Navigation {
     this.setSurfaceView(null);
   }
 
-  goSystem() {
+  /** The Solar System is being left for a wider view: drop any selection, no flight. */
+  leave() {
+    this.reset('system', null);
+    this.d.ui.showSystem();
+  }
+
+  goSystem(onArrive?: () => void) {
     const { system, ui, director } = this.d;
     this.reset('system', null);
     ui.showSystem();
@@ -82,7 +88,24 @@ export class Navigation {
       minDistance: sunR * 1.6, maxDistance: 3000 * systemFactor(),
       avoid: { center: (out) => out.copy(ORIGIN), radius: sunR * 1.3 },
       pullBack: true,
+      onArrive,
     });
+  }
+
+  /** The overview, entered by zooming in from the neighbourhood (the camera is already there). */
+  arriveSystem() {
+    this.reset('system', null);
+    this.d.ui.showSystem();
+  }
+
+  /** Camera distance of the overview (scene units). */
+  get overviewDistance() {
+    return OVERVIEW.length() * systemFactor();
+  }
+
+  /** Closest the camera may come to the Sun in the overview. */
+  get overviewMinDistance() {
+    return this.d.system.get('sun').radius * 1.6;
   }
 
   focusRegion(r: RegionDef) {
@@ -134,9 +157,11 @@ export class Navigation {
       const outward = center.clone().sub(b.parent.getWorldPosition()).normalize();
       dir = outward.multiplyScalar(0.8).add(toSun.multiplyScalar(0.35)).add(new THREE.Vector3(0, 0.3, 0)).normalize();
     } else dir = toSun.multiplyScalar(0.6).add(fromCam.multiplyScalar(0.5)).add(up).normalize();
+    const distance = R * (FRAMING[b.def.id] ?? 3.8);
+    this.d.system.expectView(b, distance);
     director.flyTo({
       anchor: b.root,
-      position: center.clone().addScaledVector(dir, R * (FRAMING[b.def.id] ?? 3.8)),
+      position: center.clone().addScaledVector(dir, distance),
       target: center,
       minDistance: R * 1.2,
       maxDistance: this.maxDistance(b),
@@ -164,6 +189,7 @@ export class Navigation {
     if (side.lengthSq() < 1e-8) side.set(0, 1, 0).addScaledVector(normal, -normal.y);
     side.normalize();
     const h = b.radius * altitude;
+    this.d.system.expectView(b, p.distanceTo(center) + h);
     this.d.director.flyTo({
       anchor,
       position: p.clone().addScaledVector(normal, h).addScaledVector(side, h * 0.55),

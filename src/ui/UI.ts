@@ -2,7 +2,8 @@ import { BODIES, type BodyDef, type Site } from '../data/bodies';
 import type { RegionDef } from '../data/regions';
 import { formatLatLon } from '../astro';
 import { categoryOf } from '../data/siteShapes';
-import { bodyByIdL, bodyL, creditsL, noticesL, regionL, regionsL, scienceL } from '../data/localize';
+import { bodyByIdL, bodyL, creditsL, deepL, levelName, noticesL, regionL, regionsL, scienceL } from '../data/localize';
+import { LEVELS, LEVEL_PANEL, levelOf, type DeepDef, type Level } from '../data/deep';
 import { EN_TIME } from '../data/en/misc';
 import { RANGES, type Accuracy } from '../data/validity';
 import { fmtNum, lang, locale, setLang, t, type Lang } from '../i18n';
@@ -75,7 +76,14 @@ export interface UIHandlers {
   toggleLight(): void;
   toggleOrbits(): void;
   setScale(real: boolean): void;
+  /** An object beyond the planets (heliosphere, probe, star…) from the list or a link. */
+  selectDeep(id: string): void;
+  /** A level of the zoom beyond the planets (breadcrumbs, back buttons). */
+  goRealm(level: Level): void;
 }
+
+/** Ids listed under "Beyond the planets", in order. */
+const DEEP_NAV = ['heliosphere', 'voyager1', 'voyager2', 'pioneer10', 'pioneer11', 'newHorizons', 'oort', 'neighbourhood', 'milkyway'];
 
 export class UI {
   private readonly panel = $('#panel');
@@ -99,6 +107,10 @@ export class UI {
   })();
 
   constructor(private readonly h: UIHandlers) {
+    const remeasure = () => (this.panelRect = null);
+    new ResizeObserver(remeasure).observe(this.panel);
+    window.addEventListener('resize', remeasure);
+    this.panel.addEventListener('transitionend', remeasure);
     this.buildNav();
     this.buildTime();
     this.buildCredits();
@@ -132,7 +144,9 @@ export class UI {
       const body = tg.closest<HTMLElement>('[data-body]');
       if (body) return h.selectBody(body.dataset.body!);
       const back = tg.closest<HTMLElement>('[data-back]');
-      if (back) (back.dataset.back === 'system' ? h.goSystem : h.goBody)();
+      const to = back?.dataset.back;
+      if (to?.startsWith('level:')) h.goRealm(to.slice(6) as Level);
+      else if (back) (to === 'system' ? h.goSystem : h.goBody)();
     });
     this.panel.addEventListener('pointerover', (e) => {
       const el = (e.target as HTMLElement).closest<HTMLElement>('.sites [data-site]');
@@ -143,7 +157,8 @@ export class UI {
       const el = (e.target as HTMLElement).closest<HTMLElement>('[data-crumb]');
       if (!el) return;
       const c = el.dataset.crumb!;
-      if (c === 'system') h.goSystem();
+      if (c.startsWith('level:')) h.goRealm(c.slice(6) as Level);
+      else if (c === 'system') h.goSystem();
       else if (c === 'body') h.goBody();
       else h.selectBody(c);
     });
@@ -165,8 +180,10 @@ export class UI {
       const tg = e.target as HTMLElement;
       const btn = tg.closest<HTMLElement>('[data-body]');
       const reg = tg.closest<HTMLElement>('[data-region]');
+      const deep = tg.closest<HTMLElement>('[data-deep]');
       if (btn) this.h.selectBody(btn.dataset.body!);
       else if (reg) this.h.selectRegion(reg.dataset.region!);
+      else if (deep) this.h.selectDeep(deep.dataset.deep!);
       else return;
       this.setNavOpen(false);
     });
@@ -187,6 +204,9 @@ export class UI {
       <h4 data-type="dwarf">${t('navDwarfs')}</h4><ul class="nav-list">${dwarfs.map(item).join('')}</ul>
       <h4 data-type="region">${t('navBelts')}</h4><ul class="nav-list">${regionsL()
         .map((r) => `<li><button data-region="${r.id}" style="--c:${r.color}"><span class="dot ring"></span><span class="n">${r.name}</span>${latin(r.name, r.latin)}</button></li>`)
+        .join('')}</ul>
+      <h4 data-type="galaxy">${t('navBeyond')}</h4><ul class="nav-list">${DEEP_NAV.map((id) => deepL(id))
+        .map((d) => `<li><button data-deep="${d.id}" style="--c:${d.color}"><span class="dot ring"></span><span class="n">${esc(d.name)}</span>${latin(d.name, d.latin)}</button></li>`)
         .join('')}</ul>`;
     if (this.activeRegion) this.setActiveRegion(this.activeRegion);
     else this.setActiveBody(this.activeId);
@@ -375,10 +395,25 @@ export class UI {
     el.querySelector('span')!.textContent = t(a === 'all' ? 'accAll' : 'accMoons', from, to);
   }
 
+  /** Formatters are built once per language: formatting from scratch every frame is costly. */
+  private dateFmt: { loc: string; day: Intl.DateTimeFormat; time: Intl.DateTimeFormat } | null = null;
+  private lastMinute = NaN;
+
   setDate(d: Date) {
-    const day = d.toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).replace(' г.', '');
-    const time = d.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
-    const s = `${day}, ${time} UTC`;
+    // The display shows minutes: nothing to do until the next one.
+    const minute = Math.floor(d.getTime() / 60_000);
+    if (minute === this.lastMinute && this.lastDate) return;
+    this.lastMinute = minute;
+    const loc = locale();
+    if (this.dateFmt?.loc !== loc) {
+      this.dateFmt = {
+        loc,
+        day: new Intl.DateTimeFormat(loc, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }),
+        time: new Intl.DateTimeFormat(loc, { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }),
+      };
+    }
+    if (!Number.isFinite(d.getTime())) return;
+    const s = `${this.dateFmt.day.format(d).replace(' г.', '')}, ${this.dateFmt.time.format(d)} UTC`;
     if (s === this.lastDate) return;
     this.lastDate = s;
     this.date.textContent = s;
@@ -404,8 +439,14 @@ export class UI {
     document.querySelectorAll<HTMLElement>('#nav-groups [data-region]').forEach((b) => b.classList.toggle('active', b.dataset.region === id));
   }
 
+  /** The levels above the Solar System, as crumbs (`cur` marks the one being shown). */
+  private realmCrumbs(upTo: Level = 'helio', cur?: Level) {
+    return LEVELS.slice(0, LEVELS.indexOf(upTo) + 1).map((l) =>
+      `<button data-crumb="level:${l}" class="${l === cur ? 'cur' : 'up'}">${levelName(l)}</button>`);
+  }
+
   private setCrumbs(body?: BodyDef, leaf?: string) {
-    const parts = [`<button data-crumb="system">${t('system')}</button>`];
+    const parts = [...this.realmCrumbs(), `<button data-crumb="system">${t('system')}</button>`];
     if (body?.parent) parts.push(`<button data-crumb="${body.parent}">${bodyByIdL(body.parent).name}</button>`);
     if (body) parts.push(`<button data-crumb="body" ${leaf ? '' : 'class="cur"'}>${body.name}</button>`);
     if (leaf) parts.push(`<span class="cur">${esc(leaf)}</span>`);
@@ -473,8 +514,13 @@ export class UI {
 
   /** Screen area covered by the panel (used to frame the camera), or null. */
   occlusion(): DOMRect | null {
-    return this.panel.classList.contains('show') ? this.panel.getBoundingClientRect() : null;
+    if (!this.panel.classList.contains('show')) return null;
+    // Measured only when the panel may have moved: reading layout every frame forces the
+    // browser to recompute it, which is expensive while labels move.
+    return (this.panelRect ??= this.panel.getBoundingClientRect());
   }
+
+  private panelRect: DOMRect | null = null;
 
   showSystem() {
     this.setCrumbs();
@@ -484,7 +530,7 @@ export class UI {
 
   showRegion(raw: RegionDef, animate = true) {
     const r = regionL(raw);
-    this.crumbs.innerHTML = `<button data-crumb="system">${t('system')}</button><span class="sep">›</span><span class="cur">${r.name}</span>`;
+    this.crumbs.innerHTML = [...this.realmCrumbs(), `<button data-crumb="system">${t('system')}</button>`, `<span class="cur">${esc(r.name)}</span>`].join('<span class="sep">›</span>');
     this.setActiveRegion(r.id);
     this.open({
       type: 'region',
@@ -494,6 +540,34 @@ export class UI {
         { id: 'facts', label: t('tabFacts'), html: factsTable(r.facts) },
       ],
       back: `<button class="back" data-back="system">${t('backSystem')}</button>`,
+    }, animate);
+  }
+
+  /** A level beyond the planets with nothing selected: crumbs only. */
+  showRealm(level: Level) {
+    this.crumbs.innerHTML = this.realmCrumbs(level, level).join('<span class="sep">›</span>');
+    this.setActiveBody(null);
+    document.querySelectorAll<HTMLElement>('#nav-groups [data-deep]').forEach((b) => b.classList.remove('active'));
+    this.panel.classList.remove('show');
+  }
+
+  /** Panel for an object beyond the planets (`d` may be built on the fly, e.g. for a star). */
+  showDeep(d: DeepDef, type: string, animate = true) {
+    const level = levelOf(d.id);
+    // A level's own panel (the heliosphere, the neighbourhood, the Milky Way) ends the crumbs.
+    const own = LEVEL_PANEL[level] === d.id;
+    this.crumbs.innerHTML = (own ? this.realmCrumbs(level, level) : [...this.realmCrumbs(level), `<span class="cur">${esc(d.name)}</span>`])
+      .join('<span class="sep">›</span>');
+    this.setActiveBody(null);
+    document.querySelectorAll<HTMLElement>('#nav-groups [data-deep]').forEach((b) => b.classList.toggle('active', b.dataset.deep === d.id));
+    this.open({
+      type,
+      header: `<div class="kind" style="--c:${d.color}">${esc(d.kind)}</div>${title(d.name, d.latin)}`,
+      tabs: [
+        { id: 'overview', label: t('tabOverview'), html: `<p class="desc">${esc(d.description)}</p>${d.note ? `<p class="note-data">${esc(d.note)}</p>` : ''}` },
+        { id: 'facts', label: t('tabFacts'), html: factsTable(d.facts) },
+      ],
+      back: own ? '' : `<button class="back" data-back="level:${level}">${t('backRealm')}</button>`,
     }, animate);
   }
 

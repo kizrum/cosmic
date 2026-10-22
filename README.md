@@ -45,6 +45,10 @@ it is in Gale crater, where the Curiosity rover is working.
 - Switch between the illustrative and the true scale.
 - Speed time up, pause it, or jump to any date.
 - Follow the distance to Earth and how long a signal takes to get there.
+- Keep zooming out past the planets: the heliosphere and the Voyagers, Pioneers and New
+  Horizons on their real trajectories, the Oort cloud, the 180 nearest stars at their true
+  positions, and the whole Milky Way seen from outside — and back in again, in one
+  continuous zoom.
 - Use the interface in English or Russian.
 
 ## Scientific basis
@@ -56,6 +60,9 @@ it is in Gale crater, where the Curiosity rover is working.
 | Position of the Moon | J. Meeus, “Astronomical Algorithms” |
 | Axes and rotation | IAU WGCCRE: precessing poles, prime meridians |
 | Surface maps | NASA, JPL, USGS and images from Voyager, Galileo, Cassini, MESSENGER, Dawn, New Horizons |
+| Spacecraft trajectories | JPL Horizons (launch to 2050/2100, then extended in a straight line) |
+| Nearest stars | HYG Database v4.1 (positions, magnitudes, spectra) |
+| The Milky Way from outside | NASA/JPL-Caltech/R. Hurt reconstruction from Spitzer data; the Sun at 26,670 ly from the centre |
 
 Checked against JPL Horizons (`npm run check:astro`, 204 reference positions): over
 1800–2050 the planets are within 0.2° (mostly hundredths of a degree), the Moon within 0.03°.
@@ -85,6 +92,17 @@ npm run preview        # serve the build at http://localhost:4173
 npm run check:layout   # verify orbits and moon systems
 npm run check:astro    # compare positions with JPL Horizons reference data
 npm run fetch:horizons # re-download that reference data (needs network)
+```
+
+Surface maps are shipped as tiers from 512 to 8192 px: the app starts on the 512 px ones
+(under a megabyte in all) and streams larger tiers as a body grows on screen. Rebuilding the
+assets (all need network for the downloads):
+
+```bash
+npm run fetch:sources  # full-resolution maps, the HYG catalogue, the Galaxy image → textures-src/
+npm run build:textures # cut the map tiers into public/textures
+npm run build:stars    # nearby stars → src/data/stars.ts
+npm run fetch:probes   # spacecraft trajectories from JPL Horizons → src/data/probeTracks.ts
 ```
 
 In VS Code: `Ctrl+Shift+B` starts the dev server, `F5` starts it and opens Chrome with the
