@@ -105,12 +105,15 @@ export function bindInput({ canvas, labelLayers, cosmos, nav, picker, markers, d
     if (credits.open) return;
     const key = keyOf(e);
     if (key === 'Escape' && ui.navOpen) ui.setNavOpen(false);
+    // Full screen closes first, back to the side panel.
+    else if (key === 'Escape' && ui.isFull) ui.setFull(false);
     else if (key === 'Escape' || key === 'Backspace') cosmos.back();
     else if (key === 'KeyL') display.toggleLight();
     else if (key === 'KeyM') display.toggleScale();
     else if (key === 'KeyO') display.toggleOrbits();
     else if (key === 'KeyS') ui.toggleSound();
     else if (key === 'KeyI') ui.toggleCollapsed();
+    else if (key === 'KeyF') ui.toggleFull();
     else if (key === 'Comma') ui.stepSpeed(-1);
     else if (key === 'Period') ui.stepSpeed(1);
     else if (key === 'Space') {

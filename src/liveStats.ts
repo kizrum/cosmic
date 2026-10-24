@@ -79,7 +79,30 @@ function moonPhase(system: SolarSystem, d: number) {
   const waxing = toSun.cross(toMoon).y > 0;
   const pct = Math.round(illum * 100);
   const name = t(pct < 3 ? 'newMoon' : pct > 97 ? 'fullMoon' : pct < 50 ? (waxing ? 'waxCrescent' : 'wanCrescent') : waxing ? 'waxing' : 'waning');
-  return t('illuminated', name, pct);
+  return { name: name[0].toUpperCase() + name.slice(1), lit: t('illuminated', pct) };
+}
+
+/** How each object can be seen from Earth at its usual brightness. */
+const EYE: Record<string, 'eyeNaked' | 'eyeBinoc' | 'eyeScope'> = {
+  moon: 'eyeNaked', mercury: 'eyeNaked', venus: 'eyeNaked', mars: 'eyeNaked', jupiter: 'eyeNaked', saturn: 'eyeNaked',
+  uranus: 'eyeBinoc', neptune: 'eyeBinoc', ceres: 'eyeBinoc',
+};
+
+/**
+ * When the object is in Earth's night sky, from its angle to the Sun (elongation): east of
+ * the Sun it follows it down in the evening, west of it it rises before it in the morning.
+ */
+function skyStat(system: SolarSystem, b: Body, d: number): LiveStat {
+  const earth = helioAu(system.get('earth'), d, tmpB).clone();
+  const geo = helioAu(b, d, tmpA).sub(earth);
+  const toSun = earth.negate();
+  const elong = geo.angleTo(toSun) / DEG;
+  const eye = t(EYE[b.def.id] ?? 'eyeScope');
+  // Counter-clockwise about ecliptic north (+Y) from the Sun = east of the Sun.
+  const east = toSun.clone().cross(geo).y > 0;
+  if (elong < 15) return { label: t('inSky'), value: t('skyLost'), sub: t('skyLostSub'), icon: 'sky' };
+  const when = elong > 150 ? 'skyNight' : east ? 'skyEvening' : 'skyMorning';
+  return { label: t('inSky'), value: t(when), sub: eye, icon: 'sky' };
 }
 
 /** Distances and light time for the body panel, at day `d`. */
@@ -89,31 +112,36 @@ export function bodyStats(system: SolarSystem, b: Body, d: number): LiveStat[] {
   const earth = system.get('earth');
   if (def.id === 'sun') {
     const km = helioAu(earth, d, tmpA).length() * AU_KM;
-    out.push({ label: t('distEarthNow'), value: fmtKm(km) });
-    out.push({ label: t('lightToEarth'), value: fmtLight(km) });
+    out.push({ label: t('distEarthNow'), value: fmtKm(km), icon: 'dist' });
+    out.push({ label: t('lightToEarth'), value: fmtLight(km), icon: 'light' });
     return out;
   }
   if (def.group === 'moon' && b.parent) {
     const km = moonOffsetKm(b, d, tmpA);
     const parent = b.parent.def;
     const parentName = lang === 'ru' ? parent.genitive ?? parent.name : bodyL(parent).name;
-    out.push({ label: t('distTo', parentName), value: fmtKm(km) });
+    out.push({ label: t('distTo', parentName), value: fmtKm(km), icon: 'dist' });
   }
   const helio = helioAu(b, d, tmpA);
   const au = helio.length();
-  if (def.group !== 'moon') out.push({ label: t('distSunNow'), value: `${fmtKm(au * AU_KM)} (${fmtNum(au, { maximumFractionDigits: 3 })} ${t('au')})` });
+  if (def.group !== 'moon') out.push({ label: t('distSunNow'), value: fmtKm(au * AU_KM), sub: `${fmtNum(au, { maximumFractionDigits: 3 })} ${t('au')}`, icon: 'sun' });
   if (def.id !== 'earth' && def.id !== 'moon') {
     const km = helio.distanceTo(helioAu(earth, d, tmpB)) * AU_KM;
-    out.push({ label: t('distEarthNow'), value: fmtKm(km) });
-    out.push({ label: t('signalFromEarth'), value: fmtLight(km) });
+    out.push({ label: t('distEarthNow'), value: fmtKm(km), icon: 'dist' });
+    out.push({ label: t('signalFromEarth'), value: fmtLight(km), icon: 'signal' });
   }
-  if (def.id === 'moon') out.push({ label: t('phase'), value: moonPhase(system, d) });
+  if (def.id === 'moon') {
+    const ph = moonPhase(system, d);
+    out.push({ label: t('phase'), value: ph.name, sub: ph.lit, icon: 'phase' });
+  }
+  // Where to look: planets, dwarf planets and our Moon (other moons sit next to their planet).
+  if (def.id !== 'earth' && (def.group === 'planet' || def.group === 'dwarf' || def.id === 'moon')) out.push(skyStat(system, b, d));
   if (def.id === 'saturn') {
     // Solar elevation above the ring plane: which face of the rings is lit.
     const pole = tmpA.set(0, 1, 0).applyQuaternion(b.tilt.getWorldQuaternion(toBody));
     const toSun = b.getWorldPosition(tmpB).negate().normalize();
     const el = Math.asin(pole.dot(toSun)) / DEG;
-    out.push({ label: t('ringSun'), value: t(el >= 0 ? 'ringLitN' : 'ringLitS', fmtNum(el, { maximumFractionDigits: 1 })) });
+    out.push({ label: t('ringSun'), value: `${fmtNum(Math.abs(el), { maximumFractionDigits: 1 })}°`, sub: t(el >= 0 ? 'ringLitN' : 'ringLitS'), icon: 'ring' });
   }
   return out;
 }
@@ -128,14 +156,14 @@ export function localConditions(b: Body, p: LatLon): LiveStat[] {
   const state = t(elev > 6 ? 'day' : elev > -6 ? 'twilight' : 'night');
   const hh = Math.floor(hour), mm = Math.floor((hour - hh) * 60);
   const out: LiveStat[] = [
-    { label: t('lighting'), value: state },
-    { label: t('sunElev'), value: `${fmtNum(elev, { maximumFractionDigits: 1, minimumFractionDigits: 1 })}°` },
-    { label: t('solarTime'), value: `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}` },
+    { label: t('lighting'), value: state, icon: 'light' },
+    { label: t('sunElev'), value: `${fmtNum(elev, { maximumFractionDigits: 1, minimumFractionDigits: 1 })}°`, icon: 'sun' },
+    { label: t('solarTime'), value: `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`, icon: 'clock' },
   ];
   if (b.def.locked && b.parent) {
     // Synchronous moons: the parent hangs motionless in the sky of the near side.
     const pe = elevation(p, overhead(b, b.parent.getWorldPosition(tmpA)));
-    out.push({ label: t('aboveHorizon', bodyL(b.parent.def).name), value: pe > 0 ? t('fixedInSky', fmtNum(pe, { maximumFractionDigits: 1 })) : t('notVisible') });
+    out.push({ label: t('aboveHorizon', bodyL(b.parent.def).name), value: pe > 0 ? t('fixedInSky', fmtNum(pe, { maximumFractionDigits: 1 })) : t('notVisible'), icon: 'sky' });
   }
   return out;
 }

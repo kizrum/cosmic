@@ -13,6 +13,8 @@ import { EN_GAS, EN_SCIENCE } from './en/science';
 import { EN_CREDITS, EN_NOTICES, EN_REGIONS } from './en/misc';
 import { DEEP, LEVEL_NAMES, STAR_NAMES, deepById, type DeepDef, type Level } from './deep';
 import { EN_DEEP, EN_LEVEL_NAMES, EN_STAR_NAMES } from './en/deep';
+import { PROFILES, type Profile } from './profiles';
+import { EN_PROFILES } from './en/profiles';
 
 const EN_BODIES = { ...EN_PLANETS, ...EN_SATELLITES };
 const cache = new Map<string, unknown>();
@@ -84,3 +86,6 @@ export const levelName = (l: Level) => (lang === 'en' ? EN_LEVEL_NAMES : LEVEL_N
 export const starInfoL = (gl: string) => (lang === 'en' ? EN_STAR_NAMES : STAR_NAMES)[gl];
 export const creditsL = (): CreditGroup[] => (lang === 'ru' ? CREDITS : EN_CREDITS);
 export const noticesL = () => (lang === 'ru' ? NOTICES : EN_NOTICES);
+
+/** Editorial profile of an object (place, hook, curious fact, history), if it has one. */
+export const profileL = (id: string): Profile | undefined => (lang === 'en' ? EN_PROFILES[id] ?? PROFILES[id] : PROFILES[id]);

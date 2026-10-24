@@ -215,13 +215,13 @@ export class LocalRealm extends Realm {
   stats(id: string, days: number): LiveStat[] {
     if ((PROBE_IDS as readonly string[]).includes(id)) {
       const p = probePosition(id as ProbeId, days);
-      if (!p) return [{ label: t('status'), value: t('notLaunched') }];
+      if (!p) return [{ label: t('status'), value: t('notLaunched'), icon: 'info' }];
       const au = p.length();
       const speed = probeSpeed(id as ProbeId, days);
       return [
-        { label: t('distSunNow'), value: `${fmtKm(au * 149_597_870.7)} (${fmtNum(au, { maximumFractionDigits: 1 })} ${t('au')})` },
-        { label: t('signalFromEarth'), value: fmtLight(au * 149_597_870.7) },
-        ...(speed ? [{ label: t('speedSun'), value: `${fmtNum(speed, { maximumFractionDigits: 1 })} ${t('kms')}` }] : []),
+        { label: t('distSunNow'), value: fmtKm(au * 149_597_870.7), sub: `${fmtNum(au, { maximumFractionDigits: 1 })} ${t('au')}`, icon: 'sun' },
+        { label: t('signalFromEarth'), value: fmtLight(au * 149_597_870.7), icon: 'signal' },
+        ...(speed ? [{ label: t('speedSun'), value: `${fmtNum(speed, { maximumFractionDigits: 1 })} ${t('kms')}`, icon: 'speed' as const }] : []),
       ];
     }
     const star = id.startsWith('star:') ? this.stars.find((s) => s.gl === id.slice(5)) : undefined;
@@ -229,11 +229,11 @@ export class LocalRealm extends Realm {
       const year = new Date(Date.UTC(2000, 0, 1) + days * 86_400_000).getUTCFullYear();
       const lum = Math.pow(10, (4.83 - star.absmag) / 2.5);
       return [
-        { label: t('distFromSun'), value: `${fmtNum(star.ly, { maximumFractionDigits: 2 })} ${t('ly')}` },
-        { label: t('lightLeft'), value: t('inYear', Math.round(year - star.ly)) },
-        { label: t('spectral'), value: star.spect || '—' },
-        { label: t('apparentMag'), value: fmtNum(star.mag, { maximumFractionDigits: 2 }) },
-        { label: t('luminosity'), value: t('timesSun', fmtNum(lum, { maximumSignificantDigits: lum < 0.01 ? 1 : 2 })) },
+        { label: t('distFromSun'), value: `${fmtNum(star.ly, { maximumFractionDigits: 2 })} ${t('ly')}`, icon: 'dist' },
+        { label: t('lightLeft'), value: t('inYear', Math.round(year - star.ly)), icon: 'light' },
+        { label: t('spectral'), value: star.spect || '—', icon: 'star' },
+        { label: t('apparentMag'), value: fmtNum(star.mag, { maximumFractionDigits: 2 }), icon: 'sky' },
+        { label: t('luminosity'), value: t('timesSun', fmtNum(lum, { maximumSignificantDigits: lum < 0.01 ? 1 : 2 })), icon: 'sun' },
       ];
     }
     return [];

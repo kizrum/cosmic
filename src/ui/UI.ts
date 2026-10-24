@@ -2,12 +2,15 @@ import { BODIES, type BodyDef, type Site } from '../data/bodies';
 import type { RegionDef } from '../data/regions';
 import { formatLatLon } from '../astro';
 import { categoryOf } from '../data/siteShapes';
-import { bodyByIdL, bodyL, creditsL, deepL, levelName, noticesL, regionL, regionsL, scienceL } from '../data/localize';
+import { bodyByIdL, bodyL, creditsL, deepL, levelName, noticesL, profileL, regionL, regionsL, scienceL } from '../data/localize';
 import { LEVELS, LEVEL_PANEL, levelOf, type DeepDef, type Level } from '../data/deep';
 import { EN_TIME } from '../data/en/misc';
 import { RANGES, type Accuracy } from '../data/validity';
 import { fmtNum, lang, locale, setLang, t, type Lang } from '../i18n';
-import { featureChips, statTiles, structureView } from './scienceViews';
+import { structureView } from './scienceViews';
+import {
+  esc, factsList, factsTimeline, funCard, groupedFacts, leadText, liveGrid, liveLabel, overviewTiles, panelHeader, timeline, type LiveStat,
+} from './panelViews';
 import * as sound from './sound';
 import { setSound, soundOn } from './sound';
 
@@ -23,10 +26,7 @@ export const TIME_PRESETS: { label: string; title: string; days: number }[] = [
 
 const presetText = (i: number) => (lang === 'ru' ? TIME_PRESETS[i] : { label: EN_TIME[i][0], title: EN_TIME[i][1] });
 
-export interface LiveStat {
-  label: string;
-  value: string;
-}
+export type { LiveStat } from './panelViews';
 
 export interface PointInfo {
   lat: number;
@@ -37,23 +37,7 @@ export interface PointInfo {
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-
-const factsTable = (facts: [string, string][] | LiveStat[]) =>
-  facts.length
-    ? `<dl class="facts">${facts
-        .map((f) => {
-          const [k, v] = Array.isArray(f) ? f : [f.label, f.value];
-          return `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`;
-        })
-        .join('')}</dl>`
-    : '';
-
 const moonsOf = (id: string) => BODIES.filter((b) => b.parent === id).map(bodyL);
-
-/** Title with the Latin name underneath — skipped when it would just repeat the title. */
-const title = (name: string, latin: string) =>
-  `<h2>${esc(name)}${latin.toLowerCase() !== name.toLowerCase() ? `<small>${esc(latin)}</small>` : ''}</h2>`;
 
 interface PanelTab {
   id: string;
@@ -139,6 +123,9 @@ export class UI {
       const tab = tg.closest<HTMLElement>('[data-tab]');
       if (tab) return this.selectTab(tab.dataset.tab!);
       if (tg.closest('[data-collapse]')) return this.setCollapsed(!this.collapsed);
+      if (tg.closest('[data-full]')) return this.setFull(!this.full);
+      const more = tg.closest<HTMLElement>('[data-more]');
+      if (more) return more.closest('section')?.classList.toggle('more-open');
       const site = tg.closest<HTMLElement>('[data-site]');
       if (site) return h.selectSite(site.dataset.body!, site.dataset.site!);
       const body = tg.closest<HTMLElement>('[data-body]');
@@ -456,7 +443,8 @@ export class UI {
   // ── Panel ───────────────────────────────────────────────────────────────────
   /**
    * Panel layout: an always-visible header (title + live data) and tabbed details that can
-   * be collapsed. The collapsed state is remembered per viewer.
+   * be collapsed, or opened over the whole screen with every section at once. The collapsed
+   * state is remembered per viewer; full screen is only ever turned on by the viewer.
    */
   /** `type` colours the card: star, planet, moon, dwarf (planet) or region (belt). */
   private open(spec: { type: string; header: string; status?: string; tabs: PanelTab[]; back?: string }, animate = true) {
@@ -467,18 +455,22 @@ export class UI {
       ? `<nav class="tabs">${tabs.map((tb) => `<button data-tab="${tb.id}" class="${tb === active ? 'on' : ''}">${tb.label}${tb.count ? `<sup>${tb.count}</sup>` : ''}</button>`).join('')}</nav>`
       : '';
     const scroll = this.panel.scrollTop;
+    const fullIcon = `<svg class="i-grow" viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M10 2h4v4M6 14H2v-4M14 2 9.5 6.5M2 14l4.5-4.5"/></svg><svg class="i-shrink" viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M10 2v4h4M6 14v-4H2M14 2 10 6M2 14l4-4"/></svg>`;
     this.panel.innerHTML = `
       <div class="ph">
         ${spec.header}
-        <button class="collapse" data-collapse title="${t('collapse')}" aria-label="${t('collapse')}"><i></i></button>
+        <div class="ph-actions">
+          <button class="full-btn" data-full title="${t(this.full ? 'shrinkFull' : 'expandFull')}" aria-label="${t(this.full ? 'shrinkFull' : 'expandFull')}" aria-pressed="${this.full}">${fullIcon}</button>
+          <button class="collapse" data-collapse title="${t('collapse')}" aria-label="${t('collapse')}"><i></i></button>
+        </div>
       </div>
       ${spec.status ?? ''}
       <div class="live"></div>
       ${bar}
       <div class="tab-body">
-        ${tabs.map((tb) => `<section data-pane="${tb.id}" ${tb === active ? '' : 'hidden'}>${tb.html}</section>`).join('')}
-        ${spec.back ?? ''}
-      </div>`;
+        ${tabs.map((tb) => `<section data-pane="${tb.id}" ${tb === active ? '' : 'hidden'}><h3 class="pane-h">${tb.label}</h3>${tb.html}</section>`).join('')}
+      </div>
+      ${spec.back ?? ''}`;
     this.panel.classList.toggle('collapsed', this.collapsed);
     if (animate) {
       this.panel.classList.remove('show');
@@ -491,6 +483,11 @@ export class UI {
   }
 
   private selectTab(id: string) {
+    if (this.full) {
+      // Every section is on screen: the tabs work as a table of contents.
+      this.panel.querySelector<HTMLElement>(`[data-pane="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
     this.lastTab = id;
     this.panel.querySelectorAll<HTMLElement>('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
     this.panel.querySelectorAll<HTMLElement>('[data-pane]').forEach((p) => (p.hidden = p.dataset.pane !== id));
@@ -512,9 +509,38 @@ export class UI {
     if (this.panel.classList.contains('show')) this.setCollapsed(!this.collapsed);
   }
 
+  /** Full-screen panel: on only at the viewer's request, never remembered. */
+  private full = false;
+
+  get isFull() {
+    return this.full;
+  }
+
+  setFull(on: boolean) {
+    if (on && !this.panel.classList.contains('show')) return;
+    if (on === this.full) return;
+    this.full = on;
+    this.panel.classList.toggle('full', on);
+    document.body.classList.toggle('panel-full', on);
+    const btn = this.panel.querySelector<HTMLElement>('[data-full]');
+    if (btn) {
+      const label = t(on ? 'shrinkFull' : 'expandFull');
+      btn.title = label;
+      btn.setAttribute('aria-label', label);
+      btn.setAttribute('aria-pressed', String(on));
+    }
+    this.panel.scrollTop = 0;
+    this.panelRect = null;
+  }
+
+  toggleFull() {
+    this.setFull(!this.full);
+  }
+
   /** Screen area covered by the panel (used to frame the camera), or null. */
   occlusion(): DOMRect | null {
-    if (!this.panel.classList.contains('show')) return null;
+    // Full screen covers the scene: keep the framing the viewer had.
+    if (!this.panel.classList.contains('show') || this.full) return null;
     // Measured only when the panel may have moved: reading layout every frame forces the
     // browser to recompute it, which is expensive while labels move.
     return (this.panelRect ??= this.panel.getBoundingClientRect());
@@ -522,22 +548,28 @@ export class UI {
 
   private panelRect: DOMRect | null = null;
 
+  private hidePanel() {
+    this.setFull(false);
+    this.panel.classList.remove('show');
+  }
+
   showSystem() {
     this.setCrumbs();
     this.setActiveBody(null);
-    this.panel.classList.remove('show');
+    this.hidePanel();
   }
 
   showRegion(raw: RegionDef, animate = true) {
     const r = regionL(raw);
+    const pr = profileL(r.id);
     this.crumbs.innerHTML = [...this.realmCrumbs(), `<button data-crumb="system">${t('system')}</button>`, `<span class="cur">${esc(r.name)}</span>`].join('<span class="sep">›</span>');
     this.setActiveRegion(r.id);
     this.open({
       type: 'region',
-      header: `<div class="kind" style="--c:${r.color}">${esc(r.kind)}</div>${title(r.name, r.latin)}`,
+      header: panelHeader({ kind: r.kind, color: r.color, title: r.name, latin: r.latin, tagline: pr?.tagline }),
       tabs: [
-        { id: 'overview', label: t('tabOverview'), html: `<p class="desc">${esc(r.description)}</p>` },
-        { id: 'facts', label: t('tabFacts'), html: factsTable(r.facts) },
+        { id: 'overview', label: t('tabOverview'), html: `${leadText(r.description)}${funCard(pr?.fun)}` },
+        { id: 'facts', label: t('tabFacts'), html: factsList(r.facts) },
       ],
       back: `<button class="back" data-back="system">${t('backSystem')}</button>`,
     }, animate);
@@ -548,24 +580,29 @@ export class UI {
     this.crumbs.innerHTML = this.realmCrumbs(level, level).join('<span class="sep">›</span>');
     this.setActiveBody(null);
     document.querySelectorAll<HTMLElement>('#nav-groups [data-deep]').forEach((b) => b.classList.remove('active'));
-    this.panel.classList.remove('show');
+    this.hidePanel();
   }
 
   /** Panel for an object beyond the planets (`d` may be built on the fly, e.g. for a star). */
   showDeep(d: DeepDef, type: string, animate = true) {
     const level = levelOf(d.id);
+    const pr = profileL(d.id);
     // A level's own panel (the heliosphere, the neighbourhood, the Milky Way) ends the crumbs.
     const own = LEVEL_PANEL[level] === d.id;
     this.crumbs.innerHTML = (own ? this.realmCrumbs(level, level) : [...this.realmCrumbs(level), `<span class="cur">${esc(d.name)}</span>`])
       .join('<span class="sep">›</span>');
     this.setActiveBody(null);
     document.querySelectorAll<HTMLElement>('#nav-groups [data-deep]').forEach((b) => b.classList.toggle('active', b.dataset.deep === d.id));
+    // A spacecraft's facts are dated milestones: they read as a timeline.
+    const probe = type === 'probe';
     this.open({
       type,
-      header: `<div class="kind" style="--c:${d.color}">${esc(d.kind)}</div>${title(d.name, d.latin)}`,
+      header: panelHeader({ kind: d.kind, color: d.color, title: d.name, latin: d.latin, tagline: pr?.tagline }),
       tabs: [
-        { id: 'overview', label: t('tabOverview'), html: `<p class="desc">${esc(d.description)}</p>${d.note ? `<p class="note-data">${esc(d.note)}</p>` : ''}` },
-        { id: 'facts', label: t('tabFacts'), html: factsTable(d.facts) },
+        { id: 'overview', label: t('tabOverview'), html: `${leadText(d.description, d.note)}${funCard(pr?.fun)}` },
+        probe
+          ? { id: 'history', label: t('tabTimeline'), count: d.facts.length, html: factsTimeline(d.facts) }
+          : { id: 'facts', label: t('tabFacts'), html: factsList(d.facts) },
       ],
       back: own ? '' : `<button class="back" data-back="level:${level}">${t('backRealm')}</button>`,
     }, animate);
@@ -576,15 +613,16 @@ export class UI {
     this.setCrumbs(b);
     this.setActiveBody(b.id);
     const sci = scienceL(b.id);
+    const pr = profileL(b.id);
     const moons = moonsOf(b.id);
     const moonList = moons.length
       ? `<ul class="moon-grid">${moons
           .map((m) => `<li><button data-body="${m.id}" style="--c:${m.color}">
-            <span class="dot"></span><b>${m.name}</b><small>${esc(m.kind)} · R ${fmtNum(Math.round(m.radiusKm))} ${t('km')}</small></button></li>`)
+            <span class="dot"></span><b>${m.name}</b><small>${esc(profileL(m.id)?.tagline ?? m.kind)}</small></button></li>`)
           .join('')}</ul>`
       : '';
     const parent = b.parent
-      ? `<button class="near" data-body="${b.parent}"><span>${t('orbits_around')}</span><b>${bodyByIdL(b.parent).name}</b></button>`
+      ? `<button class="near" data-body="${b.parent}"><span>${t('orbits_around')}</span><b>${bodyByIdL(b.parent).name} ›</b></button>`
       : '';
     const cats = new Map<string, { id: string; color: string }>();
     const siteList = b.sites.length
@@ -608,16 +646,17 @@ export class UI {
       : `${legend}${siteList}<p class="tip">${b.sites.length ? t('sitesTip') : ''}${t('scanTip')}</p>`;
     this.open({
       type: b.group,
-      header: `<div class="kind" style="--c:${b.color}">${esc(b.kind)}</div>${title(b.name, b.latin)}`,
+      header: panelHeader({ kind: b.kind, color: b.color, place: pr?.place, title: b.name, latin: b.latin, tagline: pr?.tagline }),
       tabs: [
         {
           id: 'overview', label: t('tabOverview'),
-          html: `${sci ? featureChips(sci) : ''}<p class="desc">${esc(b.description)}</p>${b.note ? `<p class="note-data">${esc(b.note)}</p>` : ''}${sci ? statTiles(b, sci) : ''}${parent}`,
+          html: `${sci ? overviewTiles(b, sci) : ''}${leadText(b.description, b.note)}${funCard(pr?.fun)}${parent}`,
         },
+        { id: 'facts', label: t('tabFacts'), html: groupedFacts(b.facts, sci) },
         { id: 'structure', label: t('tabStructure'), html: sci ? structureView(b, sci) : '' },
-        { id: 'facts', label: t('tabFacts'), html: factsTable(b.facts) },
         { id: 'sites', label: t('tabSites'), count: b.sites.length, html: sites },
         { id: 'moons', label: t('tabMoons'), count: moons.length, html: moonList },
+        { id: 'history', label: t('tabHistory'), count: pr?.history?.length, html: timeline(pr?.history ?? []) },
       ],
       back: `<button class="back" data-back="system">${t('backSystem')}</button>`,
     }, animate);
@@ -630,9 +669,9 @@ export class UI {
     const coord = s.elevation ? `${fmtNum(b.radiusKm * s.elevation, { maximumFractionDigits: 0 })} ${t('ringPlane')}` : formatLatLon(s.lat, s.lon);
     this.open({
       type: b.group,
-      header: `<div class="kind" style="--c:${b.color}">${esc(s.kind)}</div><h2>${esc(s.name)}</h2><div class="coord">${b.name} · ${coord}</div>`,
+      header: panelHeader({ kind: s.kind, color: b.color, title: s.name, coord: `${esc(b.name)} · ${coord}` }),
       status: animate ? `<div class="scan"><span></span>${t('scanSite')}</div>` : '',
-      tabs: [{ id: 'overview', label: t('tabOverview'), html: `<p class="desc">${esc(s.description)}</p>${factsTable(s.facts ?? [])}` }],
+      tabs: [{ id: 'overview', label: t('tabOverview'), html: `<p class="desc">${esc(s.description)}</p>${factsList(s.facts ?? [])}` }],
       back: `<button class="back" data-back="body">${b.group === 'moon' ? t('backMoon') : t('backPlanet')}</button>`,
     }, animate);
   }
@@ -648,7 +687,7 @@ export class UI {
       : '';
     this.open({
       type: b.group,
-      header: `<div class="kind" style="--c:${b.color}">${t('unexplored')}</div><h2>${formatLatLon(p.lat, p.lon)}</h2><div class="coord">${b.name}</div>`,
+      header: panelHeader({ kind: t('unexplored'), color: b.color, title: formatLatLon(p.lat, p.lon), coord: esc(b.name) }),
       status: animate ? `<div class="scan"><span></span>${t('scanSector')}</div>` : '',
       tabs: [{ id: 'overview', label: t('tabOverview'), html: near }],
       back: `<button class="back" data-back="body">${t('backBody')}</button>`,
@@ -656,20 +695,24 @@ export class UI {
     this.setLive(p.status);
   }
 
-  /** Live values tick several times a second: update the numbers in place when the rows
+  /** Live values tick several times a second: update the numbers in place when the cells
    *  are unchanged, so nothing re-flows or flickers. */
   setLive(stats: LiveStat[]) {
     const el = this.live();
     if (!el) return;
-    const rows = el.querySelectorAll('.facts > div');
-    const same = rows.length === stats.length && stats.every((s, i) => rows[i].querySelector('dt')!.textContent === s.label);
+    const cells = el.querySelectorAll('.nc');
+    const same = cells.length === stats.length && stats.every((s, i) => cells[i].getAttribute('data-k') === s.label);
     if (!same) {
-      el.innerHTML = factsTable(stats);
+      el.innerHTML = liveGrid(stats);
+      el.querySelectorAll('.nc').forEach((c, i) => c.setAttribute('data-k', stats[i].label));
       return;
     }
     stats.forEach((s, i) => {
-      const dd = rows[i].querySelector('dd')!;
-      if (dd.textContent !== s.value) dd.textContent = s.value;
+      const v = cells[i].querySelector('.nv')!;
+      const l = cells[i].querySelector('.nl')!;
+      if (v.textContent !== s.value) v.textContent = s.value;
+      const label = liveLabel(s);
+      if (l.textContent !== label) l.textContent = label;
     });
   }
 
